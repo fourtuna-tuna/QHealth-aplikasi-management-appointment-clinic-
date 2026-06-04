@@ -1,0 +1,31 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Riwayat</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="history-content">
+  <div class="screen stack">
+    <article class="panel record" *ngFor="let record of records">
+      <span class="pill">{{ record.visited_at | date:'dd MMM yyyy' }}</span>
+      <h2>{{ record.diagnosis }}</h2>
+      <p>{{ record.doctor?.name }} - {{ record.doctor?.service?.name }}</p>
+      <dl>
+        <div>
+          <dt>Resep</dt>
+          <dd>{{ record.prescription || '-' }}</dd>
+        </div>
+        <div>
+          <dt>Tindakan</dt>
+          <dd>{{ record.treatment || '-' }}</dd>
+        </div>
+        <div>
+          <dt>Catatan</dt>
+          <dd>{{ record.doctor_notes || '-' }}</dd>
+        </div>
+      </dl>
+    </article>
+
+    <ion-text color="medium" *ngIf="records.length === 0">Belum ada rekam medis.</ion-text>
+  </div>
+</ion-content>

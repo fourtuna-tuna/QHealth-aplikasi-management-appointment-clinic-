@@ -1,0 +1,18 @@
+:host { --mint:#82c8bc; --teal:#12888a; --ink:#073d36; }
+ion-toolbar { --background:var(--teal); --color:#fff; }
+ion-content.appointments-content { --background:#f7fbfa; }
+.stack { display:grid; gap:14px; padding-bottom:96px; }
+.booking-panel { border-radius:20px; border-color:#d9eeee; }
+.form-title { margin-bottom:12px; }
+h2, h3 { margin:0 0 10px; letter-spacing:0; color:var(--ink); }
+.form-title span { color:#65767c; font-size:12px; font-weight:700; }
+ion-list { background:transparent; }
+ion-item { --background:#eef8f6; --border-radius:12px; --padding-start:12px; --inner-padding-end:12px; margin-bottom:10px; color:var(--ink); }
+ion-textarea { min-height:92px; }
+.booking-panel ion-button { min-height:46px; --background:var(--teal); --border-radius:14px; --box-shadow:none; margin-top:10px; font-weight:900; text-transform:none; }
+.appointment { display:grid; gap:12px; border-radius:18px; border-color:#d9eeee; }
+.appointment p { margin:0; color:#65767c; line-height:1.4; }
+.appointment h3 { margin-top:10px; }
+.actions { display:flex; gap:8px; flex-wrap:wrap; }
+.actions ion-button { --border-color:var(--teal); --color:var(--teal); }
+.empty-note { margin:4px 2px 0; color:#65767c; font-weight:700; text-align:center; }

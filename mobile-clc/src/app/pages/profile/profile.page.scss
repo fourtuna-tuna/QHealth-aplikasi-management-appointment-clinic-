@@ -1,0 +1,7 @@
+.stack { display: grid; gap: 14px; }
+.identity { display: flex; gap: 14px; align-items: center; }
+.avatar { width: 58px; height: 58px; border-radius: 8px; background: #2563eb; color: white; display: grid; place-items: center; font-size: 24px; font-weight: 800; }
+h2 { margin: 0 0 6px; font-size: 18px; }
+p { margin: 0; }
+ion-list { background: transparent; }
+ion-item { --background: #f8fbfa; --border-radius: 8px; margin-bottom: 10px; }

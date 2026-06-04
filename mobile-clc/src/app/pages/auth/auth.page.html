@@ -1,0 +1,80 @@
+<ion-content fullscreen class="auth-content">
+  <div class="auth-shell" [class.register-shell]="mode === 'register'">
+    <div class="brand-stack">
+      <img class="brand-logo" src="assets/qhealth-logo.png" alt="QHealth">
+      <h1>QHealth<span>+</span></h1>
+    </div>
+
+    <form class="auth-card" (ngSubmit)="submit()">
+      <div *ngIf="mode === 'forgot'" class="mode-copy">
+        <h2>Lupa Password?</h2>
+        <p>Masukkan email akun Anda. QHealth akan mengirim link untuk membuat password baru.</p>
+      </div>
+
+      <div *ngIf="mode === 'reset'" class="mode-copy">
+        <h2>Konfirmasi Reset Password</h2>
+        <p>Buat password baru untuk akun Anda. Token dari email dipakai otomatis.</p>
+      </div>
+
+      <p class="register-copy" *ngIf="mode === 'register'">Silahkan isi data diri Anda dengan sesuai.</p>
+
+      <ion-list lines="none">
+        <label class="field" *ngIf="mode === 'register'">
+          <span>Nama Lengkap</span>
+          <ion-input [(ngModel)]="form.name" name="name" required></ion-input>
+        </label>
+
+        <label class="field" *ngIf="mode === 'register'">
+          <span>Telepon</span>
+          <ion-input [(ngModel)]="form.phone" name="phone"></ion-input>
+        </label>
+
+        <label class="field">
+          <span>Email</span>
+          <ion-input type="email" [(ngModel)]="form.email" name="email" [readonly]="mode === 'reset'" required></ion-input>
+        </label>
+
+        <label class="field" *ngIf="mode !== 'forgot'">
+          <span>{{ mode === 'reset' ? 'Password Baru' : 'Password' }}</span>
+          <ion-input type="password" [(ngModel)]="form.password" name="password" required minlength="8"></ion-input>
+        </label>
+
+        <label class="field" *ngIf="mode === 'register' || mode === 'reset'">
+          <span>Konfirmasi Password</span>
+          <ion-input type="password" [(ngModel)]="form.password_confirmation" name="password_confirmation" required minlength="8"></ion-input>
+        </label>
+      </ion-list>
+
+      <div class="password-rules" *ngIf="mode === 'register'">
+        <p>Ketentuan Password :</p>
+        <ul>
+          <li>Minimal 8 karakter</li>
+          <li>Mengandung huruf besar dan huruf kecil</li>
+          <li>Mengandung angka</li>
+          <li>Mengandung minimal 1 karakter khusus</li>
+          <li>Tidak menggunakan spasi</li>
+        </ul>
+      </div>
+
+      <div class="form-links">
+        <button *ngIf="mode === 'login'" type="button" class="text-button" (click)="openForgotPassword()">Lupa Password?</button>
+        <button *ngIf="mode === 'forgot'" type="button" class="text-button" (click)="backToLogin()">Kembali ke Login</button>
+      </div>
+
+      <ion-button expand="block" type="submit" [disabled]="loading">
+        <ion-spinner *ngIf="loading" name="crescent"></ion-spinner>
+        <span *ngIf="!loading">{{ mode === 'login' ? 'Masuk' : mode === 'register' ? 'Registrasi' : mode === 'forgot' ? 'Kirim Email Reset' : 'Reset Password' }}</span>
+      </ion-button>
+
+      <p class="switch-copy" *ngIf="mode === 'login'">
+        Belum punya akun?
+        <button type="button" (click)="mode = 'register'">Daftar sekarang</button>
+      </p>
+
+      <p class="switch-copy" *ngIf="mode === 'register'">
+        Sudah punya akun?
+        <button type="button" (click)="mode = 'login'">Masuk sekarang</button>
+      </p>
+    </form>
+  </div>
+</ion-content>

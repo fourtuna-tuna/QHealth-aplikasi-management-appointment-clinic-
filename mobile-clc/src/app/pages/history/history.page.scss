@@ -1,0 +1,12 @@
+:host { --mint:#82c8bc; --teal:#12888a; --ink:#073d36; }
+ion-toolbar { --background:var(--teal); --color:#fff; }
+ion-content.history-content { --background:#f7fbfa; }
+.stack { display:grid; gap:12px; padding-bottom:96px; }
+.record { border-radius:18px; border-color:#d9eeee; }
+h2 { margin:10px 0 4px; color:var(--ink); font-size:18px; letter-spacing:0; }
+p { margin:0 0 12px; color:#65767c; }
+dl { margin:0; display:grid; gap:10px; }
+dl div { padding:10px 12px; border-radius:12px; background:#eef8f6; }
+dt { color:var(--teal); font-size:12px; font-weight:900; text-transform:uppercase; }
+dd { margin:2px 0 0; line-height:1.45; color:#263238; }
+.pill { background:#e7f6f3; color:var(--teal); }

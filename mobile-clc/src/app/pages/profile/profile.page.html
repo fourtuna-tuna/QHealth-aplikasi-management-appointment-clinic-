@@ -1,0 +1,49 @@
+<ion-header><ion-toolbar><ion-title>Profil</ion-title></ion-toolbar></ion-header>
+<ion-content>
+  <div class="screen stack">
+    <section class="panel identity">
+      <div class="avatar">{{ (form.name || 'P').charAt(0) }}</div>
+      <div>
+        <h2>{{ form.name || 'Pasien' }}</h2>
+        <p>{{ form.email }}</p>
+      </div>
+    </section>
+
+    <section class="panel" *ngIf="queue">
+      <span class="pill">Antrean aktif</span>
+      <h2>A{{ queue.appointment.queue_number | number:'3.0-0' }}</h2>
+      <p class="muted">Nomor antrean booking aktif Anda</p>
+    </section>
+
+    <form class="panel" (ngSubmit)="save()">
+      <h2>Data Pasien</h2>
+      <ion-list lines="none">
+        <ion-item><ion-input label="Nama" labelPlacement="stacked" [(ngModel)]="form.name" name="name" required></ion-input></ion-item>
+        <ion-item><ion-input label="Email" labelPlacement="stacked" type="email" [(ngModel)]="form.email" name="email" required></ion-input></ion-item>
+        <ion-item><ion-input label="Telepon" labelPlacement="stacked" [(ngModel)]="form.phone" name="phone"></ion-input></ion-item>
+        <ion-item><ion-input label="Tanggal Lahir" labelPlacement="stacked" type="date" [(ngModel)]="form.birth_date" name="birth_date"></ion-input></ion-item>
+        <ion-item>
+          <ion-select label="Jenis Kelamin" labelPlacement="stacked" [(ngModel)]="form.gender" name="gender">
+            <ion-select-option value="Perempuan">Perempuan</ion-select-option>
+            <ion-select-option value="Laki-laki">Laki-laki</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item><ion-input label="Golongan Darah" labelPlacement="stacked" [(ngModel)]="form.blood_type" name="blood_type"></ion-input></ion-item>
+        <ion-item><ion-textarea label="Alamat" labelPlacement="stacked" [(ngModel)]="form.address" name="address"></ion-textarea></ion-item>
+      </ion-list>
+      <ion-button expand="block" type="submit">Simpan Profil</ion-button>
+      <ion-button expand="block" fill="clear" color="danger" type="button" (click)="logout()">Keluar</ion-button>
+    </form>
+
+    <form class="panel" (ngSubmit)="changePassword()">
+      <h2>Ganti Password</h2>
+      <ion-list lines="none">
+        <ion-item><ion-input label="Password Lama" labelPlacement="stacked" type="password" [(ngModel)]="passwordForm.current_password" name="current_password" required></ion-input></ion-item>
+        <ion-item><ion-input label="Password Baru" labelPlacement="stacked" type="password" [(ngModel)]="passwordForm.password" name="new_password" required minlength="8"></ion-input></ion-item>
+        <ion-item><ion-input label="Konfirmasi Password Baru" labelPlacement="stacked" type="password" [(ngModel)]="passwordForm.password_confirmation" name="new_password_confirmation" required minlength="8"></ion-input></ion-item>
+      </ion-list>
+      <ion-button expand="block" type="submit" [disabled]="!passwordForm.current_password || passwordForm.password.length < 8 || passwordForm.password !== passwordForm.password_confirmation">Ganti Password</ion-button>
+      <ion-button expand="block" fill="outline" type="button" (click)="sendResetPassword()">Kirim Link Reset via Email</ion-button>
+    </form>
+  </div>
+</ion-content>

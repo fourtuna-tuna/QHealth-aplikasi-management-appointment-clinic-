@@ -1,0 +1,7 @@
+{
+  "name": "mobile-clc",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular"
+}

@@ -1,0 +1,55 @@
+<ion-content fullscreen class="queue-content">
+  <header class="mini-header">
+    <ion-button fill="clear" routerLink="/tabs/home" aria-label="Kembali">
+      <ion-icon name="arrow-back"></ion-icon>
+    </ion-button>
+    <div class="mini-brand">
+      <img src="assets/qhealth-logo.png" alt="QHealth">
+      <strong>QHealth<span>+</span></strong>
+    </div>
+  </header>
+
+  <div class="queue-screen">
+    <section class="ticket-card" *ngIf="queue; else empty">
+      <div class="ticket-top"></div>
+      <div class="ticket-title">
+        <span>Nomor Antrian</span>
+        <strong>A{{ queue.appointment.queue_number | number:'3.0-0' }}</strong>
+        <em>{{ queue.appointment.status }}</em>
+      </div>
+
+      <div class="queue-stats">
+        <div>
+          <span>Sisa Antrean</span>
+          <b>{{ queue.remaining_queue }}</b>
+        </div>
+        <div>
+          <span>Sedang Dilayani</span>
+          <b>{{ queue.current_queue || '-' }}</b>
+        </div>
+      </div>
+
+      <div class="ticket-meta">
+        <div><span>Poli</span><b>{{ queue.appointment.doctor?.service?.name || '-' }}</b></div>
+        <div><span>Dokter</span><b>{{ queue.appointment.doctor?.name || '-' }}</b></div>
+        <div><span>Tanggal Rujukan</span><b>{{ queue.appointment.appointment_date | date:'dd-MMM-yyyy' }}</b></div>
+        <div><span>Keluhan</span><b>{{ queue.appointment.complaint || '-' }}</b></div>
+      </div>
+
+      <div class="ticket-actions">
+        <ion-button type="button" (click)="checkIn()">Check-in</ion-button>
+        <ion-button type="button" fill="outline" color="danger" (click)="cancel()">Batal</ion-button>
+      </div>
+      <small>*) Peserta datang 60 menit lebih awal guna percepatan administrasi</small>
+    </section>
+
+    <ng-template #empty>
+      <section class="ticket-card empty">
+        <div class="ticket-top"></div>
+        <h1>Belum ada antrean aktif</h1>
+        <p>Buat booking terlebih dahulu untuk mendapatkan nomor antrean.</p>
+        <ion-button routerLink="/tabs/appointments">Buat Booking</ion-button>
+      </section>
+    </ng-template>
+  </div>
+</ion-content>

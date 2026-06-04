@@ -1,0 +1,53 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>
+      <span class="toolbar-brand">
+        <img src="assets/qhealth-logo.png" alt="QHealth">
+        QHealth<span>+</span>
+      </span>
+    </ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="home-content">
+  <div class="screen home-screen">
+    <section class="hero">
+      <div>
+        <span class="pill">Halo, {{ patient?.name || 'Pasien' }}</span>
+        <h1>Atur kunjungan klinik tanpa menunggu bingung.</h1>
+        <p>Lihat jadwal dokter, ambil antrean, dan pantau rekam medis dari satu aplikasi.</p>
+      </div>
+      <ion-button routerLink="/tabs/appointments">
+        <ion-icon name="calendar-outline" slot="start"></ion-icon>
+        Ambil Antrean
+      </ion-button>
+    </section>
+
+    <section class="summary">
+      <div class="panel">
+        <span class="muted">Antrean aktif</span>
+        <strong>{{ queue ? 'A' + (queue.appointment.queue_number | number:'3.0-0') : '-' }}</strong>
+        <small>{{ queue ? 'Nomor antrean Anda' : 'Belum ada booking aktif' }}</small>
+      </div>
+      <div class="panel">
+        <span class="muted">Booking</span>
+        <strong>{{ activeAppointments.length }}</strong>
+        <small>Booking aktif Anda</small>
+      </div>
+    </section>
+
+    <div class="section-head">
+      <h2>Layanan Tersedia</h2>
+      <a routerLink="/tabs/doctors">Lihat dokter</a>
+    </div>
+    <div class="service-list">
+      <article class="panel service" *ngFor="let service of services">
+        <div>
+          <h3>{{ service.name }}</h3>
+          <p>{{ service.description || 'Layanan pemeriksaan klinik.' }}</p>
+        </div>
+        <span>Rp {{ service.price | number:'1.0-0' }}</span>
+      </article>
+    </div>
+  </div>
+</ion-content>

@@ -1,0 +1,42 @@
+<ion-content fullscreen class="doctor-content">
+  <header class="doctor-header">
+    <ion-button fill="clear" routerLink="/tabs/home" aria-label="Kembali">
+      <ion-icon name="arrow-back"></ion-icon>
+    </ion-button>
+    <div>
+      <h1>Daftar Dokter</h1>
+      <p>data dari jadwal praktik dokter</p>
+    </div>
+  </header>
+
+  <div class="doctor-screen">
+    <section class="service-group" *ngFor="let service of services">
+      <div class="group-title">
+        <span>{{ service.name }}</span>
+        <strong>Rp {{ service.price | number:'1.0-0' }}</strong>
+      </div>
+
+      <article class="doctor-row" *ngFor="let doctor of doctorsForService(service.id)">
+        <div class="doctor-icon">
+          <ion-icon name="medkit"></ion-icon>
+        </div>
+        <div>
+          <h2>{{ doctor.name }}</h2>
+          <p>{{ doctor.specialization || 'hari tersedianya dokter waktu praktik dokter' }}</p>
+          <p *ngIf="doctor.sip_number">SIP {{ doctor.sip_number }}</p>
+          <small *ngIf="doctor.schedules?.length">{{ doctor.schedules?.[0]?.day }} {{ doctor.schedules?.[0]?.start_time?.slice(0,5) }}</small>
+        </div>
+      </article>
+
+      <article class="doctor-row empty-row" *ngIf="doctorsForService(service.id).length === 0">
+        <div class="doctor-icon">
+          <ion-icon name="medkit"></ion-icon>
+        </div>
+        <div>
+          <h2>Dokter belum tersedia</h2>
+          <p>Jadwal praktik akan tampil setelah admin mengaktifkan dokter.</p>
+        </div>
+      </article>
+    </section>
+  </div>
+</ion-content>

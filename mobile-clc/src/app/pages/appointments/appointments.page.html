@@ -1,0 +1,55 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Ambil Antrean</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="appointments-content">
+  <div class="screen stack">
+    <form class="panel booking-panel" (ngSubmit)="submit()">
+      <div class="form-title">
+        <h2>Buat Kunjungan</h2>
+        <span>Data pasien memakai akun login</span>
+      </div>
+
+      <ion-list lines="none">
+        <ion-item>
+          <ion-select label="Dokter / Poli" labelPlacement="stacked" [(ngModel)]="form.doctor_id" name="doctor_id" (ionChange)="loadSchedules()">
+            <ion-select-option *ngFor="let doctor of doctors" [value]="doctor.id">{{ doctor.name }} - {{ doctor.service?.name }}</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-select label="Jadwal" labelPlacement="stacked" [(ngModel)]="form.doctor_schedule_id" name="doctor_schedule_id">
+            <ion-select-option *ngFor="let schedule of schedules" [value]="schedule.id">{{ schedule.day }} {{ schedule.start_time.slice(0,5) }} - {{ schedule.end_time.slice(0,5) }}</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-input label="Tanggal Daftar" labelPlacement="stacked" type="date" [(ngModel)]="form.appointment_date" name="appointment_date"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-textarea label="Keluhan" labelPlacement="stacked" placeholder="Silahkan isi keluhan..." [(ngModel)]="form.complaint" name="complaint" required></ion-textarea>
+        </ion-item>
+      </ion-list>
+
+      <ion-button expand="block" type="submit" [disabled]="!form.doctor_id || !form.doctor_schedule_id || !form.appointment_date || !form.complaint.trim()">
+        <ion-icon name="checkmark-circle-outline" slot="start"></ion-icon>
+        Simpan
+      </ion-button>
+    </form>
+
+    <section class="panel appointment" *ngFor="let appointment of activeAppointments">
+      <div>
+        <span class="pill">A{{ appointment.queue_number | number:'3.0-0' }}</span>
+        <h3>{{ appointment.doctor?.service?.name || 'Layanan Klinik' }}</h3>
+        <p>{{ appointment.doctor?.name || '-' }} • {{ appointment.appointment_date | date:'dd MMM yyyy' }}</p>
+        <p>{{ appointment.complaint }}</p>
+      </div>
+      <div class="actions">
+        <ion-button fill="outline" type="button" (click)="checkIn(appointment)">Check-in</ion-button>
+        <ion-button fill="clear" color="danger" type="button" (click)="cancel(appointment)">Batal</ion-button>
+      </div>
+    </section>
+
+    <p class="empty-note" *ngIf="activeAppointments.length === 0">Belum ada booking aktif.</p>
+  </div>
+</ion-content>
