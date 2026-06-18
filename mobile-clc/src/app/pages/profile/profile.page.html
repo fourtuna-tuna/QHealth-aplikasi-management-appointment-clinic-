@@ -1,9 +1,9 @@
 <ion-header><ion-toolbar><ion-title>Profil</ion-title></ion-toolbar></ion-header>
-<ion-content>
+<ion-content class="profile-content">
   <div class="screen stack">
     <section class="panel identity">
       <div class="avatar">{{ (form.name || 'P').charAt(0) }}</div>
-      <div>
+      <div class="identity-text">
         <h2>{{ form.name || 'Pasien' }}</h2>
         <p>{{ form.email }}</p>
       </div>

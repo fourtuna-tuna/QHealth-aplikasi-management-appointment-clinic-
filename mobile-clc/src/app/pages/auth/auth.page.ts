@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { ToastController } from '@ionic/angular';
 import { Observable } from 'rxjs';
 import { AuthService } from '../../services/auth.service';
+import { PrivacyPolicyService } from '../../services/privacy-policy.service';
 
 @Component({
   selector: 'app-auth',
@@ -16,6 +17,7 @@ export class AuthPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastController);
+  readonly privacyPolicy = inject(PrivacyPolicyService);
   mode: 'login' | 'register' | 'forgot' | 'reset' = 'login';
   form = { name: '', email: '', token: '', password: '', password_confirmation: '', phone: '', birth_date: '', gender: 'Perempuan', address: '' };
   loading = false;
@@ -30,7 +32,7 @@ export class AuthPage {
       this.form.token = params.get('token') || '';
     }
 
-    if (this.auth.patient && this.mode !== 'reset') {
+    if (this.auth.isAuthenticated && this.privacyPolicy.accepted && this.mode !== 'reset') {
       this.router.navigateByUrl('/tabs/home', { replaceUrl: true });
     }
   }
@@ -49,6 +51,12 @@ export class AuthPage {
   }
 
   submit(): void {
+    if (!this.privacyPolicy.accepted) {
+      this.toast.create({ message: 'Setujui Kebijakan Privasi QHealth terlebih dahulu.', duration: 2200, color: 'warning' })
+        .then(toast => toast.present());
+      return;
+    }
+
     this.loading = true;
     const request: Observable<unknown> = this.mode === 'login'
       ? this.auth.login(this.form.email, this.form.password)
@@ -81,10 +89,8 @@ export class AuthPage {
         }
 
         if (this.mode === 'register') {
-          (await this.toast.create({ message: 'Akun berhasil dibuat. Silakan login.', duration: 2200, color: 'primary' })).present();
-          this.mode = 'login';
-          this.form.password = '';
-          this.form.password_confirmation = '';
+          (await this.toast.create({ message: 'Akun berhasil dibuat. Selamat datang di QHealth clinic', duration: 1800, color: 'primary' })).present();
+          this.router.navigateByUrl('/tabs/home', { replaceUrl: true });
           return;
         }
 

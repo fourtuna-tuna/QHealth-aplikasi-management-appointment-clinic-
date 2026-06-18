@@ -33,6 +33,8 @@ export interface Schedule {
 
 export interface Appointment {
   id: number;
+  user_id?: number | string;
+  patient_id?: number | string;
   doctor_id: number;
   doctor?: Doctor;
   schedule?: Schedule;
@@ -70,8 +72,6 @@ export class ClinicService {
   schedules(doctorId: number): Observable<Schedule[]> { return this.api.get(`/doctors/${doctorId}/schedules`); }
   appointments(): Observable<Appointment[]> { return this.api.get('/patient/appointments'); }
   createAppointment(data: unknown): Observable<Appointment> { return this.api.post('/patient/appointments', data); }
-  checkIn(id: number): Observable<Appointment> { return this.api.patch(`/patient/appointments/${id}/check-in`, {}); }
-  cancelAppointment(id: number): Observable<Appointment> { return this.api.delete(`/patient/appointments/${id}`); }
   queue(): Observable<QueueInfo | null> { return this.api.get('/patient/queue'); }
   histories(): Observable<MedicalRecord[]> { return this.api.get('/patient/histories'); }
 }

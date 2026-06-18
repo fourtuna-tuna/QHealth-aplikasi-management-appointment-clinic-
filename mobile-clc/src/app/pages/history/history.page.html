@@ -26,6 +26,7 @@
       </dl>
     </article>
 
-    <ion-text color="medium" *ngIf="records.length === 0">Belum ada rekam medis.</ion-text>
+    <ion-text color="medium" *ngIf="loading">Memuat riwayat...</ion-text>
+    <ion-text color="medium" *ngIf="!loading && records.length === 0">Belum ada rekam medis.</ion-text>
   </div>
 </ion-content>

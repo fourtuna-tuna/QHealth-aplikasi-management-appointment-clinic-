@@ -1,0 +1,6 @@
+.idea/
+*.zip
+*.log
+*.jks
+*.keystore
+google-services.json

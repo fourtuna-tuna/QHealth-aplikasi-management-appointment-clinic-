@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { ToastController } from '@ionic/angular';
 import { AuthService, Patient } from '../../services/auth.service';
 import { ClinicService, QueueInfo } from '../../services/clinic.service';
+import { OfflineSyncService } from '../../services/offline-sync.service';
 
 @Component({
   selector: 'app-profile',
@@ -13,6 +14,7 @@ import { ClinicService, QueueInfo } from '../../services/clinic.service';
 export class ProfilePage {
   private readonly auth = inject(AuthService);
   private readonly clinic = inject(ClinicService);
+  private readonly offlineSync = inject(OfflineSyncService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastController);
   form: Partial<Patient> = {};
@@ -20,14 +22,34 @@ export class ProfilePage {
   queue: QueueInfo | null = null;
 
   ionViewWillEnter(): void {
-    this.form = { ...(this.auth.patient || {}) };
-    this.clinic.queue().subscribe(data => this.queue = data);
+    void this.offlineSync.syncPendingRequests();
+    this.form = { ...(this.auth.patient || {}), ...this.latestPendingProfileBody() };
+    this.queue = null;
+    this.clinic.queue().subscribe({
+      next: data => this.queue = data,
+      error: () => this.queue = null,
+    });
   }
 
   save(): void {
-    this.auth.updateProfile(this.form).subscribe(async patient => {
-      this.form = { ...patient };
-      (await this.toast.create({ message: 'Profil berhasil diperbarui', duration: 1400, color: 'primary' })).present();
+    if (!this.offlineSync.isOnline()) {
+      this.offlineSync.addPendingRequest({ method: 'PATCH', url: '/auth/profile', body: this.form });
+      return;
+    }
+
+    this.auth.updateProfile(this.form).subscribe({
+      next: async patient => {
+        this.form = { ...patient };
+        (await this.toast.create({ message: 'Profil berhasil diperbarui', duration: 1400, color: 'primary' })).present();
+      },
+      error: async err => {
+        if (err.status === 0) {
+          this.offlineSync.addPendingRequest({ method: 'PATCH', url: '/auth/profile', body: this.form });
+          return;
+        }
+
+        (await this.toast.create({ message: err.userMessage || err.message || 'Profil gagal diperbarui', duration: 2600, color: 'danger' })).present();
+      },
     });
   }
 
@@ -62,5 +84,15 @@ export class ProfilePage {
         this.router.navigateByUrl('/auth', { replaceUrl: true });
       },
     });
+  }
+
+  private latestPendingProfileBody(): Partial<Patient> {
+    const pendingProfile = [...this.offlineSync.getPendingRequests()]
+      .reverse()
+      .find(request => request.url === '/auth/profile' && request.method === 'PATCH');
+
+    return pendingProfile?.body && typeof pendingProfile.body === 'object'
+      ? pendingProfile.body as Partial<Patient>
+      : {};
   }
 }

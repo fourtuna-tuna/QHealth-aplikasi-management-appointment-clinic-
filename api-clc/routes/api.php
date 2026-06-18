@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -63,6 +64,49 @@ if (! function_exists('latest_queue_reset_at')) {
     function next_queue_number(string $appointmentDate): int
     {
         return ((clone queue_base_query($appointmentDate))->max('queue_number') ?? 0) + 1;
+    }
+
+    function active_queue_statuses(): array
+    {
+        return ['booked', 'pending', 'checked_in'];
+    }
+
+    function waiting_check_in_statuses(): array
+    {
+        return ['booked', 'pending'];
+    }
+
+    function auto_cancel_expired_appointments(): int
+    {
+        $minutes = max(1, (int) env('AUTO_CANCEL_MINUTES', 30));
+        $now = now();
+        $cancelled = 0;
+
+        Appointment::with(['schedule', 'medicalRecord'])
+            ->whereIn('status', waiting_check_in_statuses())
+            ->where('payment_status', '!=', 'paid')
+            ->whereNull('checked_in_at')
+            ->whereDate('appointment_date', '<=', $now->toDateString())
+            ->whereDoesntHave('medicalRecord')
+            ->chunkById(100, function ($appointments) use ($minutes, $now, &$cancelled) {
+                foreach ($appointments as $appointment) {
+                    $startTime = $appointment->schedule?->start_time;
+
+                    if (! $appointment->appointment_date || ! $startTime) {
+                        continue;
+                    }
+
+                    $deadline = Carbon::parse($appointment->appointment_date->toDateString().' '.substr($startTime, 0, 5))
+                        ->addMinutes($minutes);
+
+                    if ($deadline->lte($now)) {
+                        $appointment->forceFill(['status' => 'cancelled'])->save();
+                        $cancelled++;
+                    }
+                }
+            });
+
+        return $cancelled;
     }
 }
 
@@ -219,9 +263,11 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::get('/patient/appointments', function (Request $request) {
+        auto_cancel_expired_appointments();
+
         return api_ok(patient($request)->appointments()
             ->with(['doctor.service', 'schedule'])
-            ->where('status', 'booked')
+            ->whereIn('status', active_queue_statuses())
             ->latest('appointment_date')
             ->latest('id')
             ->get());
@@ -236,9 +282,11 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
 
         $schedule = DoctorSchedule::where('doctor_id', $data['doctor_id'])->findOrFail($data['doctor_schedule_id']);
+        auto_cancel_expired_appointments();
+
         $activeOnSchedule = (clone queue_base_query($data['appointment_date']))
             ->where('doctor_schedule_id', $schedule->id)
-            ->whereIn('status', ['booked', 'checked_in', 'in_progress'])
+            ->whereIn('status', active_queue_statuses())
             ->count();
 
         if ($activeOnSchedule >= $schedule->quota) {
@@ -258,10 +306,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::patch('/patient/appointments/{appointment}/check-in', function (Request $request, Appointment $appointment) {
         abort_unless($appointment->user_id === patient($request)->id, 403);
-        abort_if(in_array($appointment->status, ['completed', 'cancelled'], true), 422, 'Antrean ini sudah tidak aktif');
-        complete_patient_visit($appointment);
-
-        return api_ok($appointment->fresh(['doctor.service', 'schedule', 'medicalRecord']), 'Check-in berhasil. Riwayat kunjungan dibuat.');
+        abort(403, 'Check-in dilakukan oleh admin klinik.');
     });
 
     Route::delete('/patient/appointments/{appointment}', function (Request $request, Appointment $appointment) {
@@ -272,12 +317,14 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::get('/patient/queue', function (Request $request) {
+        auto_cancel_expired_appointments();
+
         $today = now()->toDateString();
         $todayResetAt = latest_queue_reset_at($today);
         $appointment = patient($request)->appointments()
             ->with(['doctor.service', 'schedule'])
             ->whereDate('appointment_date', '>=', $today)
-            ->where('status', 'booked')
+            ->whereIn('status', active_queue_statuses())
             ->when($todayResetAt, function ($query) use ($today, $todayResetAt) {
                 $query->where(function ($inner) use ($today, $todayResetAt) {
                     $inner->whereDate('appointment_date', '!=', $today)
@@ -294,7 +341,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         $queueDate = $appointment->appointment_date->toDateString();
         $activeQueue = (clone queue_base_query($queueDate))
-            ->where('status', 'booked');
+            ->whereIn('status', active_queue_statuses());
         $currentQueue = (clone $activeQueue)->orderBy('queue_number')->value('queue_number') ?? 0;
         $remainingQueue = (clone $activeQueue)
             ->where('queue_number', '<', $appointment->queue_number)
@@ -308,6 +355,8 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::get('/patient/histories', function (Request $request) {
+        auto_cancel_expired_appointments();
+
         return api_ok(patient($request)->medicalRecords()
             ->with(['doctor.service', 'appointment'])
             ->latest('visited_at')

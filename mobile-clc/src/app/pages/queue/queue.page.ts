@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
-import { ToastController } from '@ionic/angular';
 import { ClinicService, QueueInfo } from '../../services/clinic.service';
+import { OfflineSyncService } from '../../services/offline-sync.service';
 
 @Component({
   selector: 'app-queue',
@@ -10,11 +10,13 @@ import { ClinicService, QueueInfo } from '../../services/clinic.service';
 })
 export class QueuePage {
   private readonly clinic = inject(ClinicService);
-  private readonly toast = inject(ToastController);
+  private readonly offlineSync = inject(OfflineSyncService);
   queue: QueueInfo | null = null;
+  loading = false;
   private refreshTimer?: ReturnType<typeof setInterval>;
 
   ionViewWillEnter(): void {
+    void this.offlineSync.syncPendingRequests();
     this.loadQueue();
     this.refreshTimer = setInterval(() => this.loadQueue(), 10000);
   }
@@ -27,32 +29,30 @@ export class QueuePage {
   }
 
   private loadQueue(): void {
-    this.clinic.queue().subscribe(data => this.queue = data);
-  }
-
-  checkIn(): void {
-    const appointment = this.queue?.appointment;
-
-    if (!appointment) {
-      return;
-    }
-
-    this.clinic.checkIn(appointment.id).subscribe(async () => {
-      this.queue = null;
-      (await this.toast.create({ message: 'Check-in berhasil. Riwayat kunjungan sudah dibuat.', duration: 2200, color: 'primary' })).present();
+    this.loading = true;
+    this.queue = null;
+    this.clinic.queue().subscribe({
+      next: data => {
+        this.queue = data;
+        this.loading = false;
+      },
+      error: () => {
+        this.queue = null;
+        this.loading = false;
+      },
     });
   }
 
-  cancel(): void {
-    const appointment = this.queue?.appointment;
+  statusLabel(status: string): string {
+    const labels: Record<string, string> = {
+      pending: 'Menunggu konfirmasi',
+      booked: 'Booking berhasil, silakan datang sesuai jadwal.',
+      checked_in: 'Sudah check-in, silakan tunggu dipanggil.',
+      completed: 'Selesai',
+      cancelled: 'Dibatalkan karena melewati waktu kedatangan',
+    };
 
-    if (!appointment) {
-      return;
-    }
-
-    this.clinic.cancelAppointment(appointment.id).subscribe(async () => {
-      this.queue = null;
-      (await this.toast.create({ message: 'Booking berhasil dibatalkan', duration: 1600, color: 'medium' })).present();
-    });
+    return labels[status] || status || '-';
   }
+
 }

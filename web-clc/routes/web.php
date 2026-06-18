@@ -7,10 +7,13 @@ use App\Models\MedicalRecord;
 use App\Models\Service;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -48,6 +51,90 @@ if (! function_exists('next_queue_number')) {
     function next_queue_number(string $appointmentDate): int
     {
         return ((clone queue_base_query($appointmentDate))->max('queue_number') ?? 0) + 1;
+    }
+
+    function active_queue_statuses(): array
+    {
+        return ['booked', 'pending', 'checked_in'];
+    }
+
+    function waiting_check_in_statuses(): array
+    {
+        return ['booked', 'pending'];
+    }
+
+    function auto_cancel_expired_appointments(): int
+    {
+        $minutes = max(1, (int) env('AUTO_CANCEL_MINUTES', 30));
+        $now = now();
+        $cancelled = 0;
+
+        Appointment::with(['schedule', 'medicalRecord'])
+            ->whereIn('status', waiting_check_in_statuses())
+            ->where('payment_status', '!=', 'paid')
+            ->whereNull('checked_in_at')
+            ->whereDate('appointment_date', '<=', $now->toDateString())
+            ->whereDoesntHave('medicalRecord')
+            ->chunkById(100, function ($appointments) use ($minutes, $now, &$cancelled) {
+                foreach ($appointments as $appointment) {
+                    $startTime = $appointment->schedule?->start_time;
+
+                    if (! $appointment->appointment_date || ! $startTime) {
+                        continue;
+                    }
+
+                    $deadline = Carbon::parse($appointment->appointment_date->toDateString().' '.substr($startTime, 0, 5))
+                        ->addMinutes($minutes);
+
+                    if ($deadline->lte($now)) {
+                        $appointment->forceFill(['status' => 'cancelled'])->save();
+                        $cancelled++;
+                    }
+                }
+            });
+
+        return $cancelled;
+    }
+}
+
+if (! function_exists('patient_role_values')) {
+    function patient_role_values(): array
+    {
+        return ['patient', 'pasien'];
+    }
+
+    function patient_accounts_query(): \Illuminate\Database\Eloquent\Builder
+    {
+        return User::whereIn('role', patient_role_values());
+    }
+}
+
+if (! function_exists('current_admin')) {
+    function current_admin(Request $request): ?User
+    {
+        return User::where('role', 'admin')->find($request->session()->get('admin_id'));
+    }
+
+    function clinic_profile(): array
+    {
+        $defaults = [
+            'name' => 'QHealth Clinic',
+            'phone' => null,
+            'address' => null,
+        ];
+
+        if (! Storage::disk('local')->exists('clinic-profile.json')) {
+            return $defaults;
+        }
+
+        $profile = json_decode(Storage::disk('local')->get('clinic-profile.json'), true);
+
+        return is_array($profile) ? array_merge($defaults, $profile) : $defaults;
+    }
+
+    function save_clinic_profile(array $profile): void
+    {
+        Storage::disk('local')->put('clinic-profile.json', json_encode($profile, JSON_PRETTY_PRINT));
     }
 }
 
@@ -106,6 +193,8 @@ Route::post('/login', function (Request $request) {
 });
 
 Route::post('/logout', function (Request $request) {
+    Auth::logout();
+
     $request->session()->forget(['admin_id', 'admin_name']);
     $request->session()->invalidate();
     $request->session()->regenerateToken();
@@ -115,8 +204,23 @@ Route::post('/logout', function (Request $request) {
 
 Route::middleware('admin')->group(function () {
     Route::get('/admin', function () {
+        auto_cancel_expired_appointments();
+
         $appointments = Appointment::with(['patient', 'doctor.service', 'schedule', 'medicalRecord'])->latest('appointment_date')->latest()->get();
-        $patients = User::where('role', 'patient')->withCount('appointments')->latest()->get();
+        $patients = patient_accounts_query()
+            ->with([
+                'medicalRecords.doctor.service',
+                'medicalRecords.appointment.doctor.service',
+            ])
+            ->withCount('appointments')
+            ->latest()
+            ->get();
+        $activeDoctors = Doctor::with('service')->where('is_active', true)->latest()->get();
+        $activeSchedules = DoctorSchedule::with('doctor.service')
+            ->where('is_active', true)
+            ->whereHas('doctor', fn ($query) => $query->where('is_active', true))
+            ->orderBy('doctor_id')
+            ->get();
         $paidAppointments = (clone $appointments)->where('payment_status', 'paid');
         $incomeTotal = $paidAppointments->sum(fn ($appointment) => (int) ($appointment->doctor?->service?->price ?? 0));
 
@@ -124,16 +228,18 @@ Route::middleware('admin')->group(function () {
             'services' => Service::withCount('doctors')->latest()->get(),
             'doctors' => Doctor::with(['service', 'schedules'])->latest()->get(),
             'schedules' => DoctorSchedule::with('doctor.service')->orderBy('doctor_id')->get(),
+            'activeDoctors' => $activeDoctors,
+            'activeSchedules' => $activeSchedules,
             'patients' => $patients,
             'appointments' => $appointments,
             'records' => MedicalRecord::with(['patient', 'doctor.service', 'appointment'])->latest('visited_at')->get(),
             'stats' => [
-                'patients' => User::where('role', 'patient')->count(),
+                'patients' => patient_accounts_query()->count(),
                 'doctors' => Doctor::count(),
                 'services' => Service::count(),
                 'appointments' => Appointment::count(),
                 'appointments_today' => Appointment::whereDate('appointment_date', now()->toDateString())->count(),
-                'appointments_active' => Appointment::whereIn('status', ['booked', 'checked_in', 'in_progress'])->count(),
+                'appointments_active' => Appointment::whereIn('status', active_queue_statuses())->count(),
                 'payments_paid' => Appointment::where('payment_status', 'paid')->count(),
                 'payments_unpaid' => Appointment::where('payment_status', 'unpaid')->count(),
                 'income_total' => $incomeTotal,
@@ -141,6 +247,58 @@ Route::middleware('admin')->group(function () {
             ],
         ]);
     })->name('admin');
+
+    Route::get('/admin/pasien', fn () => redirect('/admin#pasien'));
+
+    Route::get('/admin/profile', fn (Request $request) => view('admin-profile', [
+        'admin' => current_admin($request),
+    ]))->name('admin.profile');
+
+    Route::get('/admin/settings', fn (Request $request) => view('admin-settings', [
+        'admin' => current_admin($request),
+        'clinic' => clinic_profile(),
+    ]))->name('admin.settings');
+
+    Route::post('/admin/settings/account', function (Request $request) {
+        $admin = current_admin($request) ?? abort(403);
+        $data = $request->validate([
+            'name' => ['required', 'max:120'],
+            'email' => ['required', 'email', 'max:160', Rule::unique('users', 'email')->ignore($admin->id)],
+        ]);
+
+        $admin->update($data);
+        $request->session()->put('admin_name', $admin->name);
+
+        return back()->with('status', 'Akun admin diperbarui');
+    })->name('admin.settings.account');
+
+    Route::post('/admin/settings/password', function (Request $request) {
+        $admin = current_admin($request) ?? abort(403);
+        $data = $request->validate([
+            'current_password' => ['required'],
+            'password' => ['required', 'confirmed', 'min:8'],
+        ]);
+
+        if (! Hash::check($data['current_password'], $admin->password)) {
+            return back()->withErrors(['current_password' => 'Password lama tidak sesuai']);
+        }
+
+        $admin->forceFill(['password' => Hash::make($data['password'])])->save();
+
+        return back()->with('status', 'Password admin diperbarui');
+    })->name('admin.settings.password');
+
+    Route::post('/admin/settings/clinic', function (Request $request) {
+        $data = $request->validate([
+            'name' => ['required', 'max:120'],
+            'phone' => ['nullable', 'max:30'],
+            'address' => ['nullable', 'max:255'],
+        ]);
+
+        save_clinic_profile($data);
+
+        return back()->with('status', 'Profil klinik diperbarui');
+    })->name('admin.settings.clinic');
 
     Route::post('/admin/services', function (Request $request) {
         Service::updateOrCreate(
@@ -203,18 +361,18 @@ Route::middleware('admin')->group(function () {
             'birth_date' => ['nullable', 'date'],
             'gender' => ['nullable', 'max:20'],
             'address' => ['nullable'],
-            'blood_type' => ['nullable', 'max:5'],
+            'blood_type' => ['nullable', Rule::in(['A', 'B', 'AB', 'O'])],
         ]);
 
         if (blank($data['email'] ?? null)) {
-            $existingUser = $request->filled('id') ? User::where('role', 'patient')->find($request->input('id')) : null;
+            $existingUser = $request->filled('id') ? patient_accounts_query()->find($request->input('id')) : null;
             $data['email'] = $existingUser && str_ends_with($existingUser->email, '@qhealth.local')
                 ? $existingUser->email
                 : 'offline+'.now()->format('YmdHis').Str::random(6).'@qhealth.local';
         }
 
         if ($request->filled('id')) {
-            User::where('role', 'patient')->findOrFail($request->input('id'))->update($data);
+            patient_accounts_query()->findOrFail($request->input('id'))->update($data);
         } else {
             User::create($data + [
                 'role' => 'patient',
@@ -225,46 +383,58 @@ Route::middleware('admin')->group(function () {
         return back()->with('status', 'Pasien tersimpan');
     });
 
+    Route::get('/admin/pasien/search', function (Request $request) {
+        $keyword = trim((string) $request->query('q', ''));
+
+        if (strlen($keyword) < 2) {
+            return response()->json([]);
+        }
+
+        $patients = patient_accounts_query()
+            ->where(function ($query) use ($keyword) {
+                $query->where('name', 'like', "%{$keyword}%")
+                    ->orWhere('email', 'like', "%{$keyword}%")
+                    ->orWhere('phone', 'like', "%{$keyword}%");
+
+                if (ctype_digit($keyword)) {
+                    $query->orWhere('id', (int) ltrim($keyword, '0'));
+                }
+            })
+            ->latest()
+            ->limit(10)
+            ->get(['id', 'name', 'email', 'phone', 'birth_date', 'gender', 'address']);
+
+        return response()->json($patients->map(fn (User $patient) => [
+            'id' => $patient->id,
+            'no_rm' => str_pad($patient->id, 6, '0', STR_PAD_LEFT),
+            'name' => $patient->name,
+            'email' => $patient->email,
+            'phone' => $patient->phone,
+            'birth_date' => $patient->birth_date?->format('d-m-Y'),
+            'gender' => $patient->gender,
+            'address' => $patient->address,
+        ]));
+    })->name('admin.patients.search');
+
     Route::post('/admin/offline-appointments', function (Request $request) {
         $data = $request->validate([
-            'user_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'patient')],
-            'patient_name' => ['required_without:user_id', 'nullable', 'max:120'],
-            'patient_email' => ['nullable', 'email', 'max:160', 'unique:users,email'],
-            'patient_phone' => ['nullable', 'max:30'],
-            'patient_birth_date' => ['nullable', 'date'],
-            'patient_gender' => ['nullable', 'max:20'],
-            'patient_address' => ['nullable'],
-            'patient_blood_type' => ['nullable', 'max:5'],
-            'doctor_id' => ['required', 'exists:doctors,id'],
-            'doctor_schedule_id' => ['required', 'exists:doctor_schedules,id'],
+            'user_id' => ['required', Rule::exists('users', 'id')->where(fn ($query) => $query->whereIn('role', patient_role_values()))],
+            'doctor_id' => ['required', Rule::exists('doctors', 'id')->where('is_active', true)],
+            'doctor_schedule_id' => ['required', Rule::exists('doctor_schedules', 'id')->where('is_active', true)],
             'appointment_date' => ['required', 'date', 'after_or_equal:today'],
             'complaint' => ['required', 'string', 'max:500'],
             'notes' => ['nullable', 'string'],
         ]);
 
-        if (filled($data['user_id'] ?? null)) {
-            $patient = User::where('role', 'patient')->findOrFail($data['user_id']);
-        } else {
-            $patient = User::create([
-                'name' => $data['patient_name'],
-                'email' => filled($data['patient_email'] ?? null)
-                    ? $data['patient_email']
-                    : 'offline+'.now()->format('YmdHis').Str::random(6).'@qhealth.local',
-                'role' => 'patient',
-                'password' => Str::random(40),
-                'phone' => $data['patient_phone'] ?? null,
-                'birth_date' => $data['patient_birth_date'] ?? null,
-                'gender' => $data['patient_gender'] ?? null,
-                'address' => $data['patient_address'] ?? null,
-                'blood_type' => $data['patient_blood_type'] ?? null,
-            ]);
-        }
+        $patient = patient_accounts_query()->findOrFail($data['user_id']);
 
         $schedule = DoctorSchedule::where('doctor_id', $data['doctor_id'])->findOrFail($data['doctor_schedule_id']);
+        auto_cancel_expired_appointments();
         $queueNumber = next_queue_number($data['appointment_date']);
+
         $activeOnSchedule = (clone queue_base_query($data['appointment_date']))
             ->where('doctor_schedule_id', $schedule->id)
-            ->whereIn('status', ['booked', 'checked_in', 'in_progress'])
+            ->whereIn('status', active_queue_statuses())
             ->count();
 
         if ($activeOnSchedule >= $schedule->quota) {
@@ -279,8 +449,7 @@ Route::middleware('admin')->group(function () {
             'complaint' => $data['complaint'],
             'notes' => $data['notes'] ?? null,
             'queue_number' => $queueNumber,
-            'status' => 'checked_in',
-            'checked_in_at' => now(),
+            'status' => 'booked',
             'payment_status' => 'unpaid',
         ]);
 
@@ -288,6 +457,14 @@ Route::middleware('admin')->group(function () {
     });
 
     Route::post('/admin/queue/reset', function () {
+        auto_cancel_expired_appointments();
+
+        Appointment::whereDate('appointment_date', now()->toDateString())
+            ->whereIn('status', active_queue_statuses())
+            ->where('payment_status', '!=', 'paid')
+            ->whereDoesntHave('medicalRecord')
+            ->update(['status' => 'cancelled', 'updated_at' => now()]);
+
         DB::table('queue_resets')->insert([
             'reset_date' => now()->toDateString(),
             'reset_at' => now(),
@@ -295,7 +472,7 @@ Route::middleware('admin')->group(function () {
             'updated_at' => now(),
         ]);
 
-        return back()->with('status', 'Antrean hari ini direset. Nomor antrean berikutnya mulai dari 1.');
+        return back()->with('status', 'Antrean aktif hari ini direset dan dibatalkan. Nomor antrean berikutnya mulai dari 1.');
     });
 
     Route::post('/admin/appointments/{appointment}/status', function (Request $request, Appointment $appointment) {
@@ -311,6 +488,11 @@ Route::middleware('admin')->group(function () {
 
     Route::post('/admin/appointments/{appointment}/payment', function (Request $request, Appointment $appointment) {
         $data = $request->validate(['payment_status' => ['required', 'in:unpaid,paid']]);
+
+        if ($data['payment_status'] === 'paid') {
+            abort_unless(in_array($appointment->status, ['checked_in', 'in_progress'], true), 422, 'Pasien harus check-in sebelum ditandai selesai.');
+        }
+
         $appointment->update([
             'payment_status' => $data['payment_status'],
             'paid_at' => $data['payment_status'] === 'paid' ? now() : null,
@@ -334,14 +516,19 @@ Route::middleware('admin')->group(function () {
             'visited_at' => ['required', 'date'],
         ]);
         $appointment = Appointment::with(['patient', 'doctor'])->findOrFail($data['appointment_id']);
+        abort_if(! $appointment->user_id, 422, 'Appointment belum terhubung ke pasien.');
+
+        $recordKey = $request->filled('id')
+            ? ['id' => $request->input('id')]
+            : ['appointment_id' => $data['appointment_id']];
 
         MedicalRecord::updateOrCreate(
-            ['id' => $request->input('id')],
+            $recordKey,
             $data + ['user_id' => $appointment->user_id, 'doctor_id' => $appointment->doctor_id]
         );
 
-        if ($appointment->status === 'in_progress') {
-            $appointment->transitionTo('completed');
+        if ($appointment->status !== 'cancelled') {
+            complete_visit($appointment->fresh(['doctor.service']));
         }
 
         return back()->with('status', 'Rekam medis tersimpan');
@@ -352,7 +539,7 @@ Route::middleware('admin')->group(function () {
             'services' => Service::findOrFail($id)->delete(),
             'doctors' => Doctor::findOrFail($id)->delete(),
             'schedules' => DoctorSchedule::findOrFail($id)->delete(),
-            'patients' => User::where('role', 'patient')->findOrFail($id)->delete(),
+            'patients' => patient_accounts_query()->findOrFail($id)->delete(),
             default => abort(404),
         };
 

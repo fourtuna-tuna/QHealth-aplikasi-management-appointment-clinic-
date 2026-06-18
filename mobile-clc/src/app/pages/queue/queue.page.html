@@ -10,38 +10,43 @@
   </header>
 
   <div class="queue-screen">
-    <section class="ticket-card" *ngIf="queue; else empty">
-      <div class="ticket-top"></div>
-      <div class="ticket-title">
-        <span>Nomor Antrian</span>
-        <strong>A{{ queue.appointment.queue_number | number:'3.0-0' }}</strong>
-        <em>{{ queue.appointment.status }}</em>
-      </div>
+    <ng-container *ngIf="loading; else loadedQueue">
+      <section class="ticket-card empty">
+        <div class="ticket-top"></div>
+        <h1>Memuat antrean...</h1>
+      </section>
+    </ng-container>
 
-      <div class="queue-stats">
-        <div>
-          <span>Sisa Antrean</span>
-          <b>{{ queue.remaining_queue }}</b>
+    <ng-template #loadedQueue>
+      <section class="ticket-card" *ngIf="queue; else empty">
+        <div class="ticket-top"></div>
+        <div class="ticket-title">
+          <span>Nomor Antrian</span>
+          <strong>A{{ queue.appointment.queue_number | number:'3.0-0' }}</strong>
+          <em>{{ statusLabel(queue.appointment.status) }}</em>
         </div>
-        <div>
-          <span>Sedang Dilayani</span>
-          <b>{{ queue.current_queue || '-' }}</b>
+
+        <div class="queue-stats">
+          <div>
+            <span>Sisa Antrean</span>
+            <b>{{ queue.remaining_queue }}</b>
+          </div>
+          <div>
+            <span>Sedang Dilayani</span>
+            <b>{{ queue.current_queue || '-' }}</b>
+          </div>
         </div>
-      </div>
 
-      <div class="ticket-meta">
-        <div><span>Poli</span><b>{{ queue.appointment.doctor?.service?.name || '-' }}</b></div>
-        <div><span>Dokter</span><b>{{ queue.appointment.doctor?.name || '-' }}</b></div>
-        <div><span>Tanggal Rujukan</span><b>{{ queue.appointment.appointment_date | date:'dd-MMM-yyyy' }}</b></div>
-        <div><span>Keluhan</span><b>{{ queue.appointment.complaint || '-' }}</b></div>
-      </div>
+        <div class="ticket-meta">
+          <div><span>Poli</span><b>{{ queue.appointment.doctor?.service?.name || '-' }}</b></div>
+          <div><span>Dokter</span><b>{{ queue.appointment.doctor?.name || '-' }}</b></div>
+          <div><span>Tanggal Rujukan</span><b>{{ queue.appointment.appointment_date | date:'dd-MMM-yyyy' }}</b></div>
+          <div><span>Keluhan</span><b>{{ queue.appointment.complaint || '-' }}</b></div>
+        </div>
 
-      <div class="ticket-actions">
-        <ion-button type="button" (click)="checkIn()">Check-in</ion-button>
-        <ion-button type="button" fill="outline" color="danger" (click)="cancel()">Batal</ion-button>
-      </div>
-      <small>*) Peserta datang 60 menit lebih awal guna percepatan administrasi</small>
-    </section>
+        <small>*) Peserta datang 60 menit lebih awal guna percepatan administrasi</small>
+      </section>
+    </ng-template>
 
     <ng-template #empty>
       <section class="ticket-card empty">

@@ -21,9 +21,10 @@ class Appointment extends Model
         'queue_number' => 'integer',
     ];
 
-    public const STATUSES = ['booked', 'checked_in', 'in_progress', 'completed', 'cancelled'];
+    public const STATUSES = ['pending', 'booked', 'checked_in', 'in_progress', 'completed', 'cancelled'];
 
     public const TRANSITIONS = [
+        'pending' => ['checked_in', 'cancelled'],
         'booked' => ['checked_in', 'cancelled'],
         'checked_in' => ['in_progress', 'cancelled'],
         'in_progress' => ['completed'],

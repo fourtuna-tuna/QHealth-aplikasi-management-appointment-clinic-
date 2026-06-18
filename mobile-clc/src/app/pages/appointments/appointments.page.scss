@@ -10,9 +10,9 @@ ion-list { background:transparent; }
 ion-item { --background:#eef8f6; --border-radius:12px; --padding-start:12px; --inner-padding-end:12px; margin-bottom:10px; color:var(--ink); }
 ion-textarea { min-height:92px; }
 .booking-panel ion-button { min-height:46px; --background:var(--teal); --border-radius:14px; --box-shadow:none; margin-top:10px; font-weight:900; text-transform:none; }
-.appointment { display:grid; gap:12px; border-radius:18px; border-color:#d9eeee; }
+.appointment { display:grid; gap:14px; border-radius:18px; border-color:#d9eeee; }
 .appointment p { margin:0; color:#65767c; line-height:1.4; }
 .appointment h3 { margin-top:10px; }
-.actions { display:flex; gap:8px; flex-wrap:wrap; }
-.actions ion-button { --border-color:var(--teal); --color:var(--teal); }
+.actions { display:flex; justify-content:center; gap:8px; flex-wrap:wrap; }
+.actions ion-button { min-width:132px; --border-radius:14px; font-weight:900; text-transform:none; }
 .empty-note { margin:4px 2px 0; color:#65767c; font-weight:700; text-align:center; }

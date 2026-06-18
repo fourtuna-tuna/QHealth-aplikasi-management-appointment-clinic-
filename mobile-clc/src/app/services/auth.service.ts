@@ -36,8 +36,12 @@ export class AuthService {
     return this.patientSubject.value;
   }
 
+  get token(): string | null {
+    return localStorage.getItem(this.tokenKey);
+  }
+
   get isAuthenticated(): boolean {
-    return Boolean(localStorage.getItem(this.tokenKey) && this.patientSubject.value);
+    return Boolean(this.token && this.patientSubject.value);
   }
 
   login(email: string, password: string): Observable<Patient> {
@@ -49,6 +53,7 @@ export class AuthService {
 
   register(data: Partial<Patient> & { password?: string; password_confirmation?: string }): Observable<Patient> {
     return this.api.post<AuthPayload>('/auth/register', data).pipe(
+      tap(payload => this.saveAuth(payload)),
       map(payload => this.authUser(payload)),
     );
   }
@@ -76,6 +81,7 @@ export class AuthService {
   clearAuth(): void {
     localStorage.removeItem(this.tokenKey);
     localStorage.removeItem(this.storageKey);
+    localStorage.removeItem('clc_patient');
     this.patientSubject.next(null);
   }
 

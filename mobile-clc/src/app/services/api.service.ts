@@ -87,16 +87,19 @@ export class ApiService {
   }
 
   private handleError(error: HttpErrorResponse, path: string): Observable<never> {
-    if (error.status === 401) {
+    const protectedRequest = this.isProtectedRequest(path);
+
+    if (protectedRequest && error.status === 401) {
       localStorage.removeItem('clc_token');
       localStorage.removeItem('clc_user');
       localStorage.removeItem('clc_patient');
+      window.dispatchEvent(new CustomEvent('clc-auth-invalid', { detail: { status: error.status } }));
     }
 
     const apiError: ApiClientError = {
       status: error.status,
       message: error.error?.message || error.message || 'API request failed',
-      userMessage: this.userMessage(error),
+      userMessage: this.userMessage(error, protectedRequest),
       url: error.url || `${this.baseUrl}${path}`,
       original: error,
     };
@@ -112,11 +115,24 @@ export class ApiService {
     return throwError(() => apiError);
   }
 
-  private userMessage(error: HttpErrorResponse): string {
+  private userMessage(error: HttpErrorResponse, protectedRequest: boolean): string {
     if (error.status === 0) {
       return `Tidak bisa terhubung ke API Laravel (${this.baseUrl}). Pastikan Laravel berjalan dan URL dapat diakses dari browser/perangkat.`;
     }
 
+    if (protectedRequest && error.status === 401) {
+      return 'Sesi login sudah berakhir. Silakan login ulang.';
+    }
+
+    if (protectedRequest && error.status === 403) {
+      return error.error?.message || 'Aksi tidak diizinkan untuk data ini.';
+    }
+
     return error.error?.message || `API Laravel error (${error.status})`;
+  }
+
+  private isProtectedRequest(path: string): boolean {
+    return path.startsWith('/patient/')
+      || ['/auth/me', '/auth/profile', '/auth/change-password', '/auth/logout'].includes(path);
   }
 }

@@ -3,6 +3,7 @@
 namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Session\TokenMismatchException;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -25,6 +26,18 @@ class Handler extends ExceptionHandler
     {
         $this->reportable(function (Throwable $e) {
             //
+        });
+
+        $this->renderable(function (TokenMismatchException $e, $request) {
+            if ($request->isMethod('post') && $request->is('logout')) {
+                $request->session()->forget(['admin_id', 'admin_name']);
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return redirect()->route('login');
+            }
+
+            return null;
         });
     }
 }

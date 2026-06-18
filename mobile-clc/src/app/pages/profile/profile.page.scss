@@ -1,7 +1,95 @@
+.profile-content .screen {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0));
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 .stack { display: grid; gap: 14px; }
-.identity { display: flex; gap: 14px; align-items: center; }
-.avatar { width: 58px; height: 58px; border-radius: 8px; background: #2563eb; color: white; display: grid; place-items: center; font-size: 24px; font-weight: 800; }
-h2 { margin: 0 0 6px; font-size: 18px; }
-p { margin: 0; }
+
+.identity {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.avatar {
+  flex: 0 0 58px;
+  width: 58px;
+  height: 58px;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.identity-text {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.identity-text h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identity-text p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.35;
+}
+
+h2 {
+  margin: 0 0 6px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-size: 18px;
+}
+
+p {
+  margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 ion-list { background: transparent; }
-ion-item { --background: #f8fbfa; --border-radius: 8px; margin-bottom: 10px; }
+
+ion-item {
+  --background: #f8fbfa;
+  --border-radius: 8px;
+  --inner-padding-end: 12px;
+  max-width: 100%;
+  min-width: 0;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+ion-input,
+ion-textarea,
+ion-select {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+ion-textarea {
+  white-space: normal;
+}
+
+ion-button {
+  max-width: 100%;
+  white-space: normal;
+}

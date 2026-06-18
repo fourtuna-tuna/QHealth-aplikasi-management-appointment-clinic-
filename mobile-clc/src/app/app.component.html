@@ -1,3 +1,9 @@
 <ion-app>
+  <div class="offline-banner" *ngIf="!(isOnline$ | async)">
+    Anda sedang offline
+  </div>
+  <div class="offline-banner pending" *ngIf="(isOnline$ | async) && ((pendingCount$ | async) || 0) > 0">
+    Ada data yang belum tersinkron
+  </div>
   <ion-router-outlet></ion-router-outlet>
 </ion-app>

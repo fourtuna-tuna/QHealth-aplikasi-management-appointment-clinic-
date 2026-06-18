@@ -1,6 +1,7 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { AuthService, Patient } from '../../services/auth.service';
 import { Appointment, ClinicService, QueueInfo, ServiceItem } from '../../services/clinic.service';
+import { OfflineSyncService } from '../../services/offline-sync.service';
 
 @Component({
   selector: 'app-home',
@@ -11,12 +12,13 @@ import { Appointment, ClinicService, QueueInfo, ServiceItem } from '../../servic
 export class HomePage implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly clinic = inject(ClinicService);
+  private readonly offlineSync = inject(OfflineSyncService);
   patient: Patient | null = null;
   services: ServiceItem[] = [];
   appointments: Appointment[] = [];
   activeAppointments: Appointment[] = [];
   queue: QueueInfo | null = null;
-  private readonly activeStatuses = ['booked'];
+  private readonly activeStatuses = ['booked', 'pending', 'checked_in'];
 
   ngOnInit(): void {
     this.patient = this.auth.patient;
@@ -24,15 +26,30 @@ export class HomePage implements OnInit {
   }
 
   ionViewWillEnter(): void {
+    void this.offlineSync.syncPendingRequests();
+    this.patient = this.auth.patient;
     this.refresh();
   }
 
   refresh(): void {
+    this.appointments = [];
+    this.activeAppointments = [];
+    this.queue = null;
+
     this.clinic.services().subscribe(data => this.services = data);
-    this.clinic.appointments().subscribe(data => {
-      this.appointments = data;
-      this.activeAppointments = data.filter(appointment => this.activeStatuses.includes(appointment.status));
+    this.clinic.appointments().subscribe({
+      next: data => {
+        this.appointments = data;
+        this.activeAppointments = this.appointments.filter(appointment => this.activeStatuses.includes(appointment.status));
+      },
+      error: () => {
+        this.appointments = [];
+        this.activeAppointments = [];
+      },
     });
-    this.clinic.queue().subscribe(data => this.queue = data);
+    this.clinic.queue().subscribe({
+      next: data => this.queue = data,
+      error: () => this.queue = null,
+    });
   }
 }
