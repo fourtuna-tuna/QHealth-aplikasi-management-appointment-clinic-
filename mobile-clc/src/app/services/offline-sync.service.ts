@@ -131,11 +131,15 @@ export class OfflineSyncService implements OnDestroy {
           break;
         }
 
+        const errorMessage = this.isActiveQueueConflict(request, apiError)
+          ? 'Anda masih memiliki antrean aktif.'
+          : apiError?.userMessage || apiError?.message || 'Sinkronisasi gagal';
+
         queue = queue.map(item => item.id === request.id
-          ? { ...item, status: 'failed', errorMessage: apiError?.userMessage || apiError?.message || 'Sinkronisasi gagal' }
+          ? { ...item, status: 'failed', errorMessage }
           : item);
         this.saveQueue(queue);
-        await this.presentToast(apiError?.userMessage || apiError?.message || 'Data offline gagal disinkronkan.', 'danger', 3200);
+        await this.presentToast(errorMessage || 'Data offline gagal disinkronkan.', 'danger', 3200);
       }
     }
 
@@ -225,6 +229,15 @@ export class OfflineSyncService implements OnDestroy {
   private isProtectedRequest(url: string): boolean {
     return url.startsWith('/patient/')
       || ['/auth/me', '/auth/profile', '/auth/change-password', '/auth/logout'].includes(url);
+  }
+
+  private isActiveQueueConflict(request: OfflineRequest, error: ApiClientError): boolean {
+    const message = `${error?.userMessage || ''} ${error?.message || ''}`.toLowerCase();
+
+    return request.method === 'POST'
+      && request.url === '/patient/appointments'
+      && [409, 422].includes(error?.status)
+      && message.includes('antrean aktif');
   }
 
   private async presentToast(message: string, color: string, duration = 1800): Promise<void> {

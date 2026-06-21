@@ -63,12 +63,26 @@ if (! function_exists('latest_queue_reset_at')) {
 
     function next_queue_number(string $appointmentDate): int
     {
-        return ((clone queue_base_query($appointmentDate))->max('queue_number') ?? 0) + 1;
+        return ((clone queue_base_query($appointmentDate))
+            ->whereIn('status', queue_number_statuses())
+            ->max('queue_number') ?? 0) + 1;
     }
 
     function active_queue_statuses(): array
     {
-        return ['booked', 'pending', 'checked_in'];
+        return ['booked', 'pending', 'checked_in', 'in_queue', 'in_progress'];
+    }
+
+    function queue_number_statuses(): array
+    {
+        return ['booked', 'pending', 'checked_in', 'in_queue', 'in_progress', 'completed', 'paid'];
+    }
+
+    function patient_has_active_appointment(User $user): bool
+    {
+        return $user->appointments()
+            ->whereIn('status', active_queue_statuses())
+            ->exists();
     }
 
     function waiting_check_in_statuses(): array
@@ -281,8 +295,17 @@ Route::middleware('auth:sanctum')->group(function () {
             'complaint' => ['required', 'string', 'max:500'],
         ]);
 
+        $user = patient($request);
         $schedule = DoctorSchedule::where('doctor_id', $data['doctor_id'])->findOrFail($data['doctor_schedule_id']);
         auto_cancel_expired_appointments();
+
+        if (patient_has_active_appointment($user)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda masih memiliki antrean aktif. Selesaikan antrean sebelumnya terlebih dahulu.',
+                'data' => null,
+            ], 409);
+        }
 
         $activeOnSchedule = (clone queue_base_query($data['appointment_date']))
             ->where('doctor_schedule_id', $schedule->id)
@@ -295,7 +318,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         $appointment = Appointment::create([
             ...$data,
-            'user_id' => patient($request)->id,
+            'user_id' => $user->id,
             'queue_number' => next_queue_number($data['appointment_date']),
             'status' => 'booked',
             'payment_status' => 'unpaid',
@@ -346,11 +369,36 @@ Route::middleware('auth:sanctum')->group(function () {
         $remainingQueue = (clone $activeQueue)
             ->where('queue_number', '<', $appointment->queue_number)
             ->count();
+        $serviceId = $appointment->doctor?->service_id;
+        $currentServiceAppointment = Appointment::query()
+            ->select('appointments.*')
+            ->join('doctors', 'appointments.doctor_id', '=', 'doctors.id')
+            ->whereDate('appointments.appointment_date', $queueDate)
+            ->whereIn('appointments.status', active_queue_statuses())
+            ->where(function ($query) {
+                $query->whereNull('appointments.payment_status')
+                    ->orWhere('appointments.payment_status', '!=', 'paid');
+            })
+            ->when($todayResetAt && $queueDate === $today, fn ($query) => $query->where('appointments.created_at', '>', $todayResetAt))
+            ->when(
+                $serviceId,
+                fn ($query) => $query->where('doctors.service_id', $serviceId),
+                fn ($query) => $query->where('appointments.doctor_id', $appointment->doctor_id)
+            )
+            ->orderBy('appointments.queue_number')
+            ->orderBy('appointments.created_at')
+            ->first();
 
         return api_ok([
             'appointment' => $appointment,
             'current_queue' => $currentQueue,
             'remaining_queue' => $remainingQueue,
+            'my_queue_number' => $appointment->queue_number,
+            'current_queue_number' => $currentServiceAppointment?->queue_number,
+            'service_name' => $appointment->doctor?->service?->name,
+            'active_appointment_status' => $appointment->status,
+            'my_appointment_id' => $appointment->id,
+            'current_queue_appointment_id' => $currentServiceAppointment?->id,
         ]);
     });
 

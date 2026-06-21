@@ -50,17 +50,60 @@ if (! function_exists('next_queue_number')) {
 
     function next_queue_number(string $appointmentDate): int
     {
-        return ((clone queue_base_query($appointmentDate))->max('queue_number') ?? 0) + 1;
+        return ((clone queue_base_query($appointmentDate))
+            ->whereIn('status', queue_number_statuses())
+            ->max('queue_number') ?? 0) + 1;
     }
 
     function active_queue_statuses(): array
     {
-        return ['booked', 'pending', 'checked_in'];
+        return ['booked', 'pending', 'checked_in', 'in_queue', 'in_progress'];
+    }
+
+    function recordable_appointment_statuses(): array
+    {
+        return ['checked_in', 'in_progress'];
+    }
+
+    function queue_number_statuses(): array
+    {
+        return ['booked', 'pending', 'checked_in', 'in_queue', 'in_progress', 'completed', 'paid'];
+    }
+
+    function patient_has_active_appointment(User $user): bool
+    {
+        return $user->appointments()
+            ->whereIn('status', active_queue_statuses())
+            ->exists();
     }
 
     function waiting_check_in_statuses(): array
     {
         return ['booked', 'pending'];
+    }
+
+    function offline_registration_note(): string
+    {
+        return 'Pendaftaran offline dari panel admin';
+    }
+
+    function payable_appointments_query(): \Illuminate\Database\Eloquent\Builder
+    {
+        return Appointment::with(['patient', 'doctor.service', 'schedule', 'medicalRecord'])
+            ->whereNotIn('status', ['cancelled', 'reset'])
+            ->where(function ($query) {
+                $query->where('payment_status', 'paid')
+                    ->orWhereIn('status', ['completed', 'paid']);
+            });
+    }
+
+    function recordable_appointments_query(): \Illuminate\Database\Eloquent\Builder
+    {
+        return Appointment::with(['patient', 'doctor.service', 'schedule'])
+            ->whereNotNull('user_id')
+            ->whereIn('status', recordable_appointment_statuses())
+            ->where('payment_status', '!=', 'paid')
+            ->whereDoesntHave('medicalRecord');
     }
 
     function auto_cancel_expired_appointments(): int
@@ -158,13 +201,24 @@ if (! function_exists('ensure_visit_history')) {
 
     function complete_visit(Appointment $appointment): void
     {
-        if (! in_array($appointment->status, ['completed', 'cancelled'], true)) {
-            $appointment->forceFill([
-                'status' => 'completed',
-                'completed_at' => $appointment->completed_at ?? now(),
-            ])->save();
+        if (in_array($appointment->status, ['cancelled', 'reset'], true)) {
+            return;
         }
 
+        $data = [
+            'status' => 'completed',
+            'completed_at' => $appointment->completed_at ?? now(),
+        ];
+
+        if (Schema::hasColumn('appointments', 'payment_status')) {
+            $data['payment_status'] = 'paid';
+        }
+
+        if (Schema::hasColumn('appointments', 'paid_at')) {
+            $data['paid_at'] = $appointment->paid_at ?? now();
+        }
+
+        $appointment->forceFill($data)->save();
         $appointment->refresh();
         ensure_visit_history($appointment);
     }
@@ -207,6 +261,14 @@ Route::middleware('admin')->group(function () {
         auto_cancel_expired_appointments();
 
         $appointments = Appointment::with(['patient', 'doctor.service', 'schedule', 'medicalRecord'])->latest('appointment_date')->latest()->get();
+        $visitAppointments = Appointment::with(['patient', 'doctor.service', 'schedule', 'medicalRecord'])
+            ->whereNotNull('user_id')
+            ->whereHas('patient', fn ($query) => $query->whereIn('role', patient_role_values()))
+            ->whereIn('status', active_queue_statuses())
+            ->where('payment_status', '!=', 'paid')
+            ->latest('appointment_date')
+            ->latest()
+            ->get();
         $patients = patient_accounts_query()
             ->with([
                 'medicalRecords.doctor.service',
@@ -221,8 +283,35 @@ Route::middleware('admin')->group(function () {
             ->whereHas('doctor', fn ($query) => $query->where('is_active', true))
             ->orderBy('doctor_id')
             ->get();
-        $paidAppointments = (clone $appointments)->where('payment_status', 'paid');
+        $activeAppointments = (clone $appointments)
+            ->whereIn('status', active_queue_statuses())
+            ->where('payment_status', '!=', 'paid')
+            ->filter(fn ($appointment) => ! $appointment->medicalRecord);
+        $registrationAppointments = Appointment::with(['patient', 'doctor.service', 'schedule'])
+            ->where('notes', offline_registration_note())
+            ->whereIn('status', waiting_check_in_statuses())
+            ->where('payment_status', '!=', 'paid')
+            ->latest('appointment_date')
+            ->latest()
+            ->get();
+        $paidAppointments = payable_appointments_query()->latest('paid_at')->latest('completed_at')->latest()->get();
+        $recordableAppointments = recordable_appointments_query()->latest('appointment_date')->latest()->get();
         $incomeTotal = $paidAppointments->sum(fn ($appointment) => (int) ($appointment->doctor?->service?->price ?? 0));
+        $currentYear = now()->year;
+        $currentMonth = now()->month;
+        $monthlyAppointmentCounts = [];
+        $monthlyIncomeTotals = [];
+
+        foreach (range(1, 12) as $month) {
+            $monthlyAppointmentCounts[$month] = $appointments
+                ->filter(fn ($appointment) => $appointment->appointment_date?->year === $currentYear && $appointment->appointment_date?->month === $month)
+                ->count();
+            $monthlyIncomeTotals[$month] = $paidAppointments
+                ->filter(fn ($appointment) => $appointment->appointment_date?->year === $currentYear && $appointment->appointment_date?->month === $month)
+                ->sum(fn ($appointment) => (int) ($appointment->doctor?->service?->price ?? 0));
+        }
+
+        $monthlyIncomeTotal = $monthlyIncomeTotals[$currentMonth] ?? 0;
 
         return view('admin', [
             'services' => Service::withCount('doctors')->latest()->get(),
@@ -232,17 +321,28 @@ Route::middleware('admin')->group(function () {
             'activeSchedules' => $activeSchedules,
             'patients' => $patients,
             'appointments' => $appointments,
+            'visitAppointments' => $visitAppointments,
+            'activeAppointments' => $activeAppointments,
+            'registrationAppointments' => $registrationAppointments,
+            'paidAppointments' => $paidAppointments,
+            'recordableAppointments' => $recordableAppointments,
+            'monthlyAppointmentCounts' => $monthlyAppointmentCounts,
+            'monthlyIncomeTotals' => $monthlyIncomeTotals,
             'records' => MedicalRecord::with(['patient', 'doctor.service', 'appointment'])->latest('visited_at')->get(),
             'stats' => [
                 'patients' => patient_accounts_query()->count(),
-                'doctors' => Doctor::count(),
+                'doctors' => $activeDoctors->count(),
                 'services' => Service::count(),
                 'appointments' => Appointment::count(),
-                'appointments_today' => Appointment::whereDate('appointment_date', now()->toDateString())->count(),
-                'appointments_active' => Appointment::whereIn('status', active_queue_statuses())->count(),
-                'payments_paid' => Appointment::where('payment_status', 'paid')->count(),
+                'appointments_today' => Appointment::whereDate('appointment_date', now()->toDateString())
+                    ->whereIn('status', active_queue_statuses())
+                    ->where('payment_status', '!=', 'paid')
+                    ->count(),
+                'appointments_active' => $activeAppointments->count(),
+                'payments_paid' => $paidAppointments->count(),
                 'payments_unpaid' => Appointment::where('payment_status', 'unpaid')->count(),
                 'income_total' => $incomeTotal,
+                'income_month' => $monthlyIncomeTotal,
                 'records' => MedicalRecord::count(),
             ],
         ]);
@@ -423,13 +523,17 @@ Route::middleware('admin')->group(function () {
             'doctor_schedule_id' => ['required', Rule::exists('doctor_schedules', 'id')->where('is_active', true)],
             'appointment_date' => ['required', 'date', 'after_or_equal:today'],
             'complaint' => ['required', 'string', 'max:500'],
-            'notes' => ['nullable', 'string'],
         ]);
 
         $patient = patient_accounts_query()->findOrFail($data['user_id']);
 
         $schedule = DoctorSchedule::where('doctor_id', $data['doctor_id'])->findOrFail($data['doctor_schedule_id']);
         auto_cancel_expired_appointments();
+
+        if (patient_has_active_appointment($patient)) {
+            return back()->withErrors(['appointment' => 'Anda masih memiliki antrean aktif. Selesaikan antrean sebelumnya terlebih dahulu.'])->withInput();
+        }
+
         $queueNumber = next_queue_number($data['appointment_date']);
 
         $activeOnSchedule = (clone queue_base_query($data['appointment_date']))
@@ -447,7 +551,7 @@ Route::middleware('admin')->group(function () {
             'doctor_schedule_id' => $schedule->id,
             'appointment_date' => $data['appointment_date'],
             'complaint' => $data['complaint'],
-            'notes' => $data['notes'] ?? null,
+            'notes' => offline_registration_note(),
             'queue_number' => $queueNumber,
             'status' => 'booked',
             'payment_status' => 'unpaid',
@@ -480,7 +584,7 @@ Route::middleware('admin')->group(function () {
         $appointment->transitionTo($data['status']);
 
         if ($data['status'] === 'completed') {
-            ensure_visit_history($appointment->fresh(['doctor.service']));
+            complete_visit($appointment->fresh(['doctor.service']));
         }
 
         return back()->with('status', 'Status kunjungan diperbarui');
@@ -517,19 +621,25 @@ Route::middleware('admin')->group(function () {
         ]);
         $appointment = Appointment::with(['patient', 'doctor'])->findOrFail($data['appointment_id']);
         abort_if(! $appointment->user_id, 422, 'Appointment belum terhubung ke pasien.');
+        abort_if(in_array($appointment->status, ['cancelled', 'reset'], true), 422, 'Appointment yang dibatalkan atau direset tidak bisa dibuatkan rekam medis.');
 
-        $recordKey = $request->filled('id')
-            ? ['id' => $request->input('id')]
-            : ['appointment_id' => $data['appointment_id']];
+        $existingRecord = MedicalRecord::where('appointment_id', $appointment->id)->first();
+        abort_if(
+            ! $existingRecord && ! in_array($appointment->status, recordable_appointment_statuses(), true),
+            422,
+            'Appointment harus check-in atau dalam proses pelayanan sebelum dibuatkan rekam medis.'
+        );
+
+        $recordKey = $existingRecord
+            ? ['id' => $existingRecord->id]
+            : ($request->filled('id') ? ['id' => $request->input('id')] : ['appointment_id' => $data['appointment_id']]);
 
         MedicalRecord::updateOrCreate(
             $recordKey,
             $data + ['user_id' => $appointment->user_id, 'doctor_id' => $appointment->doctor_id]
         );
 
-        if ($appointment->status !== 'cancelled') {
-            complete_visit($appointment->fresh(['doctor.service']));
-        }
+        complete_visit($appointment->fresh(['doctor.service']));
 
         return back()->with('status', 'Rekam medis tersimpan');
     });

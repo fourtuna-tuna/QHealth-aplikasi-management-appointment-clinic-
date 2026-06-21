@@ -21,7 +21,7 @@ export class AppointmentsPage {
   appointments: Appointment[] = [];
   activeAppointments: Appointment[] = [];
   form = { doctor_id: 0, doctor_schedule_id: 0, appointment_date: this.tomorrow(), complaint: '' };
-  private readonly activeStatuses = ['booked', 'pending', 'checked_in'];
+  private readonly activeStatuses = ['booked', 'pending', 'checked_in', 'in_queue', 'in_progress'];
   loading = false;
   isSubmitting = false;
 
@@ -65,6 +65,12 @@ export class AppointmentsPage {
 
   submit(): void {
     if (this.isSubmitting) {
+      return;
+    }
+
+    if (this.activeAppointments.length > 0) {
+      this.toast.create({ message: 'Anda masih memiliki antrean aktif.', duration: 2600, color: 'warning' })
+        .then(toast => toast.present());
       return;
     }
 
@@ -115,8 +121,11 @@ export class AppointmentsPage {
       pending: 'Menunggu konfirmasi',
       booked: 'Booking berhasil',
       checked_in: 'Sudah check-in, silakan tunggu dipanggil.',
+      in_queue: 'Sedang dalam antrean',
+      in_progress: 'Sedang dilayani',
       completed: 'Selesai',
       cancelled: 'Dibatalkan karena melewati waktu kedatangan',
+      reset: 'Direset',
     };
 
     return labels[status] || status || '-';

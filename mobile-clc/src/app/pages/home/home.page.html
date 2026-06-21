@@ -25,14 +25,14 @@
 
     <section class="summary">
       <div class="panel">
-        <span class="muted">Antrean aktif</span>
-        <strong>{{ queue ? 'A' + (queue.appointment.queue_number | number:'3.0-0') : '-' }}</strong>
-        <small>{{ queue ? 'Nomor antrean Anda' : 'Belum ada booking aktif' }}</small>
+        <span class="muted">Antrian Berjalan</span>
+        <strong>{{ currentQueueNumber() }}</strong>
+        <small>{{ queueNote() }}</small>
       </div>
       <div class="panel">
-        <span class="muted">Booking</span>
-        <strong>{{ activeAppointments.length }}</strong>
-        <small>Booking aktif Anda</small>
+        <span class="muted">Nomor Antrian Saya</span>
+        <strong>{{ myQueueNumber() }}</strong>
+        <small>{{ queueNote() }}</small>
       </div>
     </section>
 

@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Appointment;
 use App\Models\Doctor;
 use App\Models\DoctorSchedule;
+use App\Models\MedicalRecord;
 use App\Models\Service;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
@@ -68,13 +70,55 @@ class PatientApiFlowTest extends TestCase
             ->assertJsonPath('data.payment_status', 'unpaid')
             ->json('data');
 
-        $this->withToken($token)->patchJson("/api/patient/appointments/{$appointment['id']}/check-in")
-            ->assertOk()
-            ->assertJsonPath('data.status', 'completed');
+        $this->withToken($token)->postJson('/api/patient/appointments', [
+            'doctor_id' => $doctor->id,
+            'doctor_schedule_id' => $schedule->id,
+            'appointment_date' => now()->addDays(2)->toDateString(),
+            'complaint' => 'Keluhan kedua',
+        ])->assertConflict()
+            ->assertJsonPath('message', 'Anda masih memiliki antrean aktif. Selesaikan antrean sebelumnya terlebih dahulu.');
+
+        Appointment::findOrFail($appointment['id'])->forceFill([
+            'status' => 'checked_in',
+            'checked_in_at' => now(),
+        ])->save();
+
+        $this->withToken($token)->postJson('/api/patient/appointments', [
+            'doctor_id' => $doctor->id,
+            'doctor_schedule_id' => $schedule->id,
+            'appointment_date' => now()->addDays(2)->toDateString(),
+            'complaint' => 'Keluhan ketiga',
+        ])->assertConflict();
+
+        $completedAppointment = Appointment::findOrFail($appointment['id']);
+        $completedAppointment->forceFill([
+            'status' => 'completed',
+            'payment_status' => 'paid',
+            'completed_at' => now(),
+            'paid_at' => now(),
+        ])->save();
+
+        MedicalRecord::create([
+            'appointment_id' => $completedAppointment->id,
+            'user_id' => $completedAppointment->user_id,
+            'doctor_id' => $completedAppointment->doctor_id,
+            'diagnosis' => 'Kunjungan selesai',
+            'treatment' => $service->name,
+            'doctor_notes' => $completedAppointment->complaint,
+            'visited_at' => $completedAppointment->appointment_date,
+        ]);
 
         $this->withToken($token)->getJson('/api/patient/queue')
             ->assertOk()
             ->assertJsonPath('data', null);
+
+        $this->withToken($token)->postJson('/api/patient/appointments', [
+            'doctor_id' => $doctor->id,
+            'doctor_schedule_id' => $schedule->id,
+            'appointment_date' => now()->addDays(2)->toDateString(),
+            'complaint' => 'Keluhan setelah selesai',
+        ])->assertCreated()
+            ->assertJsonPath('data.status', 'booked');
 
         $this->withToken($token)->getJson('/api/patient/histories')
             ->assertOk()

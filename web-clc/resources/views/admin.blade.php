@@ -64,14 +64,14 @@
         .icon-blue { background:var(--blue); }
         .icon-cyan { background:var(--cyan); }
         .icon-red { background:var(--red); }
-        .stats { display:grid; grid-template-columns:repeat(3, minmax(180px,1fr)); gap:18px; margin-bottom:22px; }
+        .stats { display:grid; grid-template-columns:repeat(4, minmax(180px,1fr)); gap:18px; margin-bottom:22px; }
         .stat { min-height:95px; padding:16px 18px; border-radius:4px; color:white; display:flex; justify-content:space-between; gap:12px; overflow:hidden; }
         .stat b { display:block; font-size:26px; margin-bottom:7px; }
         .stat span { font-size:13px; font-weight:800; }
         .stat small { display:block; color:rgba(255,255,255,.76); margin-top:14px; }
         .stat svg { width:34px; height:34px; opacity:.75; margin-top:4px; }
         .stat.blue { background:#168c8e; } .stat.lime { background:#0f766e; } .stat.orange { background:#f59e0b; } .stat.red { background:#d95b5f; }
-        .charts { display:grid; grid-template-columns:2fr 1fr; gap:18px; }
+        .charts { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:18px; }
         .chart-card { background:white; border:1px solid var(--line); border-radius:4px; padding:18px; min-height:260px; }
         .bars { height:190px; display:grid; grid-template-columns:repeat(12,1fr); align-items:end; gap:10px; border-left:1px solid var(--line); border-bottom:1px solid var(--line); padding:10px 8px 0; margin-top:18px; }
         .bar { background:#82c8bc; min-height:3px; border-radius:3px 3px 0 0; }
@@ -115,9 +115,17 @@
 </head>
 <body>
 @php
-    $paidAppointments = $appointments->where('payment_status', 'paid');
+    $paidAppointments = $paidAppointments ?? $appointments->where('payment_status', 'paid');
+    $recordableAppointments = $recordableAppointments ?? collect();
+    $registrationAppointments = $registrationAppointments ?? $activeAppointments ?? collect();
     $incomeTotal = $stats['income_total'] ?? 0;
-    $statusLabel = ['pending' => 'Menunggu', 'booked' => 'Booking', 'checked_in' => 'Sudah Check-in', 'in_progress' => 'Proses Pelayanan', 'completed' => 'Selesai', 'cancelled' => 'Dibatalkan otomatis / Tidak hadir'];
+    $incomeMonth = $stats['income_month'] ?? 0;
+    $monthlyAppointmentCounts = $monthlyAppointmentCounts ?? array_fill(1, 12, 0);
+    $monthlyIncomeTotals = $monthlyIncomeTotals ?? array_fill(1, 12, 0);
+    $maxMonthlyAppointments = max(1, max($monthlyAppointmentCounts));
+    $maxMonthlyIncome = max(1, max($monthlyIncomeTotals));
+    $monthLabels = [1 => 'Jan', 2 => 'Feb', 3 => 'Mar', 4 => 'Apr', 5 => 'Mei', 6 => 'Jun', 7 => 'Jul', 8 => 'Agu', 9 => 'Sep', 10 => 'Okt', 11 => 'Nov', 12 => 'Des'];
+    $statusLabel = ['pending' => 'Menunggu', 'booked' => 'Booking', 'checked_in' => 'Sudah Check-in', 'in_queue' => 'Dalam Antrean', 'in_progress' => 'Proses Pelayanan', 'completed' => 'Selesai', 'paid' => 'Lunas', 'cancelled' => 'Dibatalkan otomatis / Tidak hadir', 'reset' => 'Direset'];
     $icon = [
         'dashboard' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/></svg>',
         'users' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
@@ -180,24 +188,34 @@
 
                 <section id="ringkasan" class="active" data-title="Dashboard">
                     <div class="stats">
-                        <div class="stat blue"><div><b>{{ $stats['services'] }}</b><span>Total Layanan</span><small>{{ now()->year }}</small></div>{!! $icon['file'] !!}</div>
-                        <div class="stat lime"><div><b>{{ $stats['payments_paid'] }}</b><span>Total Transaksi</span><small>{{ now()->year }}</small></div>{!! $icon['cash'] !!}</div>
-                        <div class="stat orange"><div><b>Rp {{ number_format($incomeTotal,0,',','.') }}</b><span>Total Income</span><small>{{ now()->year }}</small></div>{!! $icon['cash'] !!}</div>
+                        <div class="stat blue"><div><b>{{ $stats['patients'] }}</b><span>Total Pasien</span><small>Semua pasien terdaftar</small></div>{!! $icon['users'] !!}</div>
+                        <div class="stat lime"><div><b>{{ $stats['doctors'] }}</b><span>Total Dokter</span><small>Dokter aktif</small></div>{!! $icon['steth'] !!}</div>
+                        <div class="stat red"><div><b>{{ $stats['appointments_today'] }}</b><span>Appointment Hari Ini</span><small>Status aktif</small></div>{!! $icon['file'] !!}</div>
+                        <div class="stat orange"><div><b>Rp {{ number_format($incomeMonth,0,',','.') }}</b><span>Pendapatan Bulan Ini</span><small>{{ now()->translatedFormat('F Y') }}</small></div>{!! $icon['cash'] !!}</div>
                     </div>
                     <div class="charts">
                         <div class="chart-card">
-                            <h3>Transaksi Perbulan</h3>
+                            <h3>Appointment Per Bulan</h3>
                             <div class="bars">
                                 @foreach(range(1, 12) as $month)
-                                    @php $count = $paidAppointments->filter(fn ($item) => $item->paid_at && $item->paid_at->month === $month)->count(); @endphp
-                                    <div class="bar" title="{{ $count }} transaksi" style="height:{{ max(3, $count * 24) }}px"></div>
+                                    @php
+                                        $count = $monthlyAppointmentCounts[$month] ?? 0;
+                                        $height = max(3, (int) round(($count / $maxMonthlyAppointments) * 170));
+                                    @endphp
+                                    <div class="bar" title="{{ $monthLabels[$month] }}: {{ $count }} appointment" style="height:{{ $height }}px"></div>
                                 @endforeach
                             </div>
                         </div>
                         <div class="chart-card">
-                            <h3>Transaksi Pertahun</h3>
-                            <div class="bars" style="grid-template-columns:1fr; padding-inline:34px;">
-                                <div class="bar" style="height:{{ max(3, $stats['payments_paid'] * 18) }}px"></div>
+                            <h3>Pendapatan Per Bulan</h3>
+                            <div class="bars">
+                                @foreach(range(1, 12) as $month)
+                                    @php
+                                        $income = $monthlyIncomeTotals[$month] ?? 0;
+                                        $height = max(3, (int) round(($income / $maxMonthlyIncome) * 170));
+                                    @endphp
+                                    <div class="bar" title="{{ $monthLabels[$month] }}: Rp {{ number_format($income,0,',','.') }}" style="height:{{ $height }}px"></div>
+                                @endforeach
                             </div>
                         </div>
                     </div>
@@ -256,14 +274,14 @@
                             <label>Layanan / Jadwal <span class="required">*</span></label><select name="doctor_schedule_id" data-schedule-options required>@foreach($activeSchedules as $schedule)<option value="{{ $schedule->id }}" data-doctor="{{ $schedule->doctor_id }}">{{ $schedule->doctor?->service?->name ?: '-' }} - {{ $schedule->day ?: '-' }} {{ $schedule->start_time ? substr($schedule->start_time,0,5) : '-' }}-{{ $schedule->end_time ? substr($schedule->end_time,0,5) : '-' }}</option>@endforeach</select>
                             <label>Tanggal <span class="required">*</span></label><input name="appointment_date" type="date" value="{{ now()->toDateString() }}" required>
                             <label>Keterangan <span class="required">*</span></label><textarea name="complaint" required></textarea>
-                            <input type="hidden" name="notes" value="Pendaftaran offline dari panel admin">
                             <div class="grid-actions"><button class="btn" type="submit">Save</button><button class="btn gray" type="reset">Cancel</button></div>
                         </form>
+                        <div class="section-head"><h2>Pendaftaran Offline Terbaru</h2></div>
                         <div class="toolbar">
                             <div class="toolbar-left"><label class="input-inline">{!! $icon['search'] !!} Pencarian : <input data-table-search="appointments-table"></label></div>
                         </div>
-                        <table id="appointments-table"><thead><tr><th>No Pendaftaran</th><th>No RM</th><th>Nama Pasien</th><th>Kategori</th><th>Layanan</th><th>Dokter</th><th>Status</th><th>Tools</th></tr></thead><tbody>
-                        @foreach($appointments as $appointment)
+                        <table id="appointments-table"><thead><tr><th>No Pendaftaran</th><th>No RM</th><th>Nama Pasien</th><th>Kategori</th><th>Layanan</th><th>Dokter</th><th>Status</th><th>Keterangan</th></tr></thead><tbody>
+                        @forelse($registrationAppointments as $appointment)
                             @php
                                 $statusClass = $appointment->status === 'cancelled'
                                     ? 'red'
@@ -271,21 +289,11 @@
                             @endphp
                             <tr>
                                 <td>{{ $appointment->created_at?->format('ymdHis') ?: '-' }}{{ $appointment->id }}</td><td>{{ $appointment->user_id ? str_pad($appointment->user_id, 6, '0', STR_PAD_LEFT) : '-' }}</td><td>{{ $appointment->patient?->name ?: '-' }}</td><td>{{ strtoupper($appointment->doctor?->service?->code ?? $appointment->doctor?->service?->name ?? '-') }}</td><td>{{ $appointment->doctor?->service?->name ?: '-' }}</td><td>{{ $appointment->doctor?->name ?: '-' }}</td><td><span class="pill {{ $statusClass }}">{{ $statusLabel[$appointment->status] ?? $appointment->status ?? '-' }}</span></td>
-                                <td class="row-actions">
-                                    @if(in_array($appointment->status, ['booked', 'pending'], true))
-                                        <form method="post" action="/admin/appointments/{{ $appointment->id }}/status">@csrf <input type="hidden" name="status" value="checked_in"><button class="btn" type="submit">Check-in</button></form>
-                                    @elseif($appointment->status === 'checked_in')
-                                        <form method="post" action="/admin/appointments/{{ $appointment->id }}/payment">@csrf <input type="hidden" name="payment_status" value="paid"><button class="btn" type="submit">Paid / Selesai</button></form>
-                                    @elseif($appointment->status === 'cancelled')
-                                        <span class="pill red">Dibatalkan</span>
-                                    @elseif($appointment->status === 'completed' || $appointment->payment_status === 'paid')
-                                        <span class="pill">Selesai</span>
-                                    @else
-                                        <span class="pill warn">{{ $statusLabel[$appointment->status] ?? $appointment->status ?? '-' }}</span>
-                                    @endif
-                                </td>
+                                <td><span class="pill warn">Check-in di Kunjungan Pasien</span></td>
                             </tr>
-                        @endforeach
+                        @empty
+                            <tr><td colspan="8" class="muted" style="text-align:center;">Belum ada pendaftaran offline aktif.</td></tr>
+                        @endforelse
                         </tbody></table>
                     </div>
                 </section>
@@ -293,16 +301,25 @@
                 <section id="kunjungan" data-title="Laporan Kunjungan">
                     <div class="panel">
                         <div class="toolbar filters"><label class="input-inline">Periode <input type="date" value="{{ now()->startOfMonth()->toDateString() }}"></label><label class="input-inline">s/d <input type="date" value="{{ now()->toDateString() }}"></label><label><select><option>Semua Status</option><option>Belum Membayar</option><option>Proses Pelayanan</option><option>Selesai Pelayanan</option></select></label><button class="btn" type="button">{!! $icon['search'] !!} Search</button></div>
-                        <table><thead><tr><th>Nomor</th><th>Tanggal Kunjungan</th><th>Nomor Pasien</th><th>Nama Pasien</th><th>Layanan</th><th>Dokter</th><th>Status Kunjungan</th><th>Status Pembayaran</th></tr></thead><tbody>
-                        @forelse($appointments as $appointment)
+                        <table><thead><tr><th>No</th><th>Tanggal Kunjungan</th><th>No Antrean</th><th>No RM</th><th>Nama Pasien</th><th>Keluhan</th><th>Layanan/Poli</th><th>Dokter</th><th>Status Kunjungan / Check-in</th><th>Aksi</th></tr></thead><tbody>
+                        @forelse($visitAppointments as $appointment)
                             @php
-                                $reportStatusClass = $appointment->status === 'cancelled'
+                                $visitStatusText = match ($appointment->status) {
+                                    'booked', 'pending' => 'Belum Check-in',
+                                    'checked_in' => 'Sudah Check-in',
+                                    'in_queue' => 'Dalam Antrean',
+                                    'in_progress' => 'Sedang Diproses',
+                                    'completed', 'paid' => 'Selesai',
+                                    'cancelled', 'reset' => 'Dibatalkan',
+                                    default => $statusLabel[$appointment->status] ?? $appointment->status ?? '-',
+                                };
+                                $reportStatusClass = in_array($appointment->status, ['cancelled', 'reset'], true)
                                     ? 'red'
-                                    : (($appointment->status === 'completed' || $appointment->payment_status === 'paid') ? '' : 'warn');
+                                    : (in_array($appointment->status, ['checked_in', 'in_queue', 'in_progress'], true) ? '' : 'warn');
                             @endphp
-                            <tr><td>{{ $loop->iteration }}</td><td>{{ $appointment->medicalRecord?->visited_at?->format('d/m/Y') ?: ($appointment->appointment_date?->format('d/m/Y') ?: '-') }}</td><td>{{ $appointment->user_id ? str_pad($appointment->user_id, 6, '0', STR_PAD_LEFT) : '-' }}</td><td>{{ $appointment->patient?->name ?: '-' }}</td><td>{{ $appointment->doctor?->service?->name ?: '-' }}</td><td>{{ $appointment->doctor?->name ?: '-' }}</td><td><span class="pill {{ $reportStatusClass }}">{{ $statusLabel[$appointment->status] ?? $appointment->status ?? '-' }}</span></td><td><span class="pill {{ $appointment->payment_status === 'paid' ? '' : 'warn' }}">{{ $appointment->payment_status === 'paid' ? 'Lunas' : 'Belum Membayar' }}</span></td></tr>
+                            <tr><td>{{ $loop->iteration }}</td><td>{{ $appointment->appointment_date?->format('d/m/Y') ?: '-' }}</td><td>{{ $appointment->queue_number ? 'A'.str_pad($appointment->queue_number, 3, '0', STR_PAD_LEFT) : '-' }}</td><td>{{ $appointment->user_id ? str_pad($appointment->user_id, 6, '0', STR_PAD_LEFT) : '-' }}</td><td>{{ $appointment->patient?->name ?: '-' }}</td><td>{{ $appointment->complaint ?: '-' }}</td><td>{{ $appointment->doctor?->service?->name ?: '-' }}</td><td>{{ $appointment->doctor?->name ?: '-' }}</td><td><span class="pill {{ $reportStatusClass }}">{{ $visitStatusText }}</span></td><td class="row-actions">@if(in_array($appointment->status, ['booked', 'pending'], true))<form method="post" action="/admin/appointments/{{ $appointment->id }}/status">@csrf <input type="hidden" name="status" value="checked_in"><button class="btn" type="submit">Check-in</button></form>@else<span class="pill">{{ $visitStatusText }}</span>@endif<details class="edit"><summary class="icon-btn icon-cyan" title="Detail">{!! $icon['eye'] !!}</summary><div class="details-card"><strong>Appointment</strong><p>#{{ $appointment->id }}</p><strong>Keluhan</strong><p>{{ $appointment->complaint ?: '-' }}</p><strong>Status</strong><p>{{ $visitStatusText }}</p></div></details></td></tr>
                         @empty
-                            <tr><td colspan="8" class="muted" style="text-align:center;">Pencarian tidak ditemukan</td></tr>
+                            <tr><td colspan="10" class="muted" style="text-align:center;">Pencarian tidak ditemukan</td></tr>
                         @endforelse
                         </tbody></table>
                     </div>
@@ -357,7 +374,11 @@
 
                 <section id="rekam" data-title="Rekam Medis">
                     <div class="panel">
-                        <form method="post" action="/admin/records" class="grid" style="margin-bottom:18px;">@csrf<label>Appointment</label><select name="appointment_id" required>@foreach($appointments as $appointment)<option value="{{ $appointment->id }}">#{{ $appointment->id }} - {{ $appointment->patient?->name ?: '-' }} / {{ $appointment->doctor?->name ?: '-' }}</option>@endforeach</select><label>Tanggal</label><input name="visited_at" type="date" value="{{ now()->toDateString() }}"><label>Diagnosis</label><input name="diagnosis" required><label>Resep</label><textarea name="prescription"></textarea><label>Tindakan</label><textarea name="treatment"></textarea><label>Catatan</label><textarea name="doctor_notes"></textarea><div class="grid-actions"><button class="btn">Simpan</button></div></form>
+                        @if($recordableAppointments->isEmpty())
+                            <p class="muted" style="margin-top:0;">Tidak ada appointment yang perlu dibuatkan rekam medis.</p>
+                        @else
+                            <form method="post" action="/admin/records" class="grid" style="margin-bottom:18px;">@csrf<label>Cari Pasien / Appointment</label><input type="search" data-record-appointment-search placeholder="Ketik nama pasien, nomor antrean, dokter, atau layanan"><label>Appointment</label><select name="appointment_id" data-record-appointment-select required>@foreach($recordableAppointments as $appointment)@php $recordOption = '#'.$appointment->id.' - '.($appointment->patient?->name ?: '-').' / '.($appointment->queue_number ? 'A'.str_pad($appointment->queue_number, 3, '0', STR_PAD_LEFT) : '-').' / '.($appointment->doctor?->name ?: '-').' / '.($appointment->doctor?->service?->name ?: '-'); @endphp<option value="{{ $appointment->id }}" data-search="{{ strtolower($recordOption.' '.$appointment->complaint) }}" data-complaint="{{ $appointment->complaint ?: '-' }}">{{ $recordOption }}</option>@endforeach</select><label>Keluhan pasien</label><div class="selected-patient" data-record-complaint style="grid-template-columns:1fr;">{{ $recordableAppointments->first()?->complaint ?: '-' }}</div><label>Tanggal</label><input name="visited_at" type="date" value="{{ now()->toDateString() }}"><label>Diagnosis</label><input name="diagnosis" required><label>Resep</label><textarea name="prescription"></textarea><label>Tindakan</label><textarea name="treatment"></textarea><label>Catatan</label><textarea name="doctor_notes"></textarea><div class="grid-actions"><button class="btn">Simpan</button></div></form>
+                        @endif
                         <div class="toolbar">
                             <div class="toolbar-left"><label class="input-inline">{!! $icon['search'] !!} Pencarian : <input data-table-search="records-table"></label></div>
                         </div>
@@ -445,6 +466,43 @@
                     row.hidden = ! haystack.includes(needle);
                 });
             });
+        });
+
+        document.querySelectorAll('[data-record-appointment-search]').forEach(function (input) {
+            var select = input.form.querySelector('[data-record-appointment-select]');
+            var complaint = input.form.querySelector('[data-record-complaint]');
+
+            function syncComplaint() {
+                var selected = select.selectedOptions[0];
+                if (complaint) {
+                    complaint.textContent = selected ? (selected.dataset.complaint || '-') : '-';
+                }
+            }
+
+            input.addEventListener('input', function () {
+                var needle = input.value.toLowerCase();
+                var firstVisible = null;
+
+                select.querySelectorAll('option').forEach(function (option) {
+                    var visible = ! needle || (option.dataset.search || option.textContent).toLowerCase().includes(needle);
+                    option.hidden = ! visible;
+                    option.disabled = ! visible;
+                    if (visible && ! firstVisible) { firstVisible = option; }
+                });
+
+                if (firstVisible) {
+                    select.value = firstVisible.value;
+                    select.setCustomValidity('');
+                } else {
+                    select.value = '';
+                    select.setCustomValidity('Appointment tidak ditemukan');
+                }
+
+                syncComplaint();
+            });
+
+            select.addEventListener('change', syncComplaint);
+            syncComplaint();
         });
 
         document.querySelectorAll('[data-schedule-filter]').forEach(function (doctorSelect) {

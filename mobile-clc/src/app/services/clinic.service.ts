@@ -50,6 +50,10 @@ export interface QueueInfo {
   appointment: Appointment;
   current_queue: number;
   remaining_queue: number;
+  my_queue_number?: number;
+  current_queue_number?: number;
+  service_name?: string;
+  active_appointment_status?: string;
 }
 
 export interface MedicalRecord {

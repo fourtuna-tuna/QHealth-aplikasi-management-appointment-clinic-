@@ -18,7 +18,7 @@ export class HomePage implements OnInit {
   appointments: Appointment[] = [];
   activeAppointments: Appointment[] = [];
   queue: QueueInfo | null = null;
-  private readonly activeStatuses = ['booked', 'pending', 'checked_in'];
+  private readonly activeStatuses = ['booked', 'pending', 'checked_in', 'in_queue', 'in_progress'];
 
   ngOnInit(): void {
     this.patient = this.auth.patient;
@@ -51,5 +51,23 @@ export class HomePage implements OnInit {
       next: data => this.queue = data,
       error: () => this.queue = null,
     });
+  }
+
+  queueNumber(value?: number | null): string {
+    return value ? `A${String(value).padStart(3, '0')}` : '-';
+  }
+
+  currentQueueNumber(): string {
+    return this.queueNumber(this.queue?.current_queue_number ?? null);
+  }
+
+  myQueueNumber(): string {
+    return this.queueNumber(this.queue?.my_queue_number ?? this.queue?.appointment?.queue_number ?? null);
+  }
+
+  queueNote(): string {
+    return this.queue
+      ? (this.queue.service_name || this.queue.appointment?.doctor?.service?.name || 'Antrean aktif Anda')
+      : 'Belum ada antrean aktif';
   }
 }

@@ -1,8 +1,11 @@
+import { Location } from '@angular/common';
 import { Component, inject, OnDestroy } from '@angular/core';
-import { Router } from '@angular/router';
-import { AlertController, ToastController } from '@ionic/angular';
+import { NavigationEnd, Router } from '@angular/router';
+import { App } from '@capacitor/app';
+import { AlertController, Platform, ToastController } from '@ionic/angular';
 import { addIcons } from 'ionicons';
 import { calendarOutline, checkmarkCircleOutline, documentTextOutline, homeOutline, medkitOutline, personOutline, ticketOutline } from 'ionicons/icons';
+import { filter, Subscription } from 'rxjs';
 import { OfflineSyncService } from './services/offline-sync.service';
 import { PrivacyPolicyService } from './services/privacy-policy.service';
 
@@ -14,6 +17,8 @@ import { PrivacyPolicyService } from './services/privacy-policy.service';
 })
 export class AppComponent implements OnDestroy {
   private readonly router = inject(Router);
+  private readonly location = inject(Location);
+  private readonly platform = inject(Platform);
   private readonly toast = inject(ToastController);
   private readonly alert = inject(AlertController);
   private readonly privacyPolicy = inject(PrivacyPolicyService);
@@ -22,15 +27,68 @@ export class AppComponent implements OnDestroy {
   readonly pendingCount$ = this.offlineSync.pendingCount$;
   private readonly invalidSessionHandler = (event: Event) => this.handleInvalidSession(event);
   private privacyAlertOpen = false;
+  private readonly homeUrl = '/tabs/home';
+  private readonly navigationHistory: string[] = [];
+  private readonly routerEventsSubscription: Subscription;
+  private readonly backButtonSubscription: Subscription;
 
   constructor() {
     addIcons({ homeOutline, medkitOutline, calendarOutline, ticketOutline, documentTextOutline, personOutline, checkmarkCircleOutline });
     window.addEventListener('clc-auth-invalid', this.invalidSessionHandler);
+    this.routerEventsSubscription = this.router.events
+      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
+      .subscribe(event => this.trackNavigation(event.urlAfterRedirects));
+    this.backButtonSubscription = this.platform.backButton.subscribeWithPriority(10, processNextHandler => this.handleAndroidBackButton(processNextHandler));
     setTimeout(() => this.presentPrivacyPolicy(), 0);
   }
 
   ngOnDestroy(): void {
     window.removeEventListener('clc-auth-invalid', this.invalidSessionHandler);
+    this.routerEventsSubscription.unsubscribe();
+    this.backButtonSubscription.unsubscribe();
+  }
+
+  private trackNavigation(url: string): void {
+    const normalizedUrl = this.normalizeUrl(url);
+    const currentUrl = this.navigationHistory[this.navigationHistory.length - 1];
+
+    if (currentUrl === normalizedUrl) {
+      return;
+    }
+
+    this.navigationHistory.push(normalizedUrl);
+  }
+
+  private async handleAndroidBackButton(processNextHandler: () => void): Promise<void> {
+    if (!this.isTabsUrl(this.router.url)) {
+      processNextHandler();
+      return;
+    }
+
+    if (this.isHomeUrl(this.router.url)) {
+      await App.exitApp();
+      return;
+    }
+
+    if (this.navigationHistory.length > 1) {
+      this.navigationHistory.pop();
+      this.location.back();
+      return;
+    }
+
+    await this.router.navigateByUrl(this.homeUrl, { replaceUrl: true });
+  }
+
+  private isTabsUrl(url: string): boolean {
+    return this.normalizeUrl(url).startsWith('/tabs');
+  }
+
+  private isHomeUrl(url: string): boolean {
+    return this.normalizeUrl(url) === this.homeUrl;
+  }
+
+  private normalizeUrl(url: string): string {
+    return url.split(/[?#]/)[0];
   }
 
   private async handleInvalidSession(event: Event): Promise<void> {

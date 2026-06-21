@@ -21,15 +21,18 @@ class Appointment extends Model
         'queue_number' => 'integer',
     ];
 
-    public const STATUSES = ['pending', 'booked', 'checked_in', 'in_progress', 'completed', 'cancelled'];
+    public const STATUSES = ['pending', 'booked', 'checked_in', 'in_queue', 'in_progress', 'completed', 'paid', 'cancelled', 'reset'];
 
     public const TRANSITIONS = [
-        'pending' => ['checked_in', 'cancelled'],
-        'booked' => ['checked_in', 'cancelled'],
-        'checked_in' => ['in_progress', 'cancelled'],
-        'in_progress' => ['completed'],
+        'pending' => ['checked_in', 'in_queue', 'cancelled', 'reset'],
+        'booked' => ['checked_in', 'in_queue', 'cancelled', 'reset'],
+        'in_queue' => ['checked_in', 'in_progress', 'cancelled', 'reset'],
+        'checked_in' => ['in_progress', 'completed', 'cancelled', 'reset'],
+        'in_progress' => ['completed', 'cancelled', 'reset'],
         'completed' => [],
+        'paid' => [],
         'cancelled' => [],
+        'reset' => [],
     ];
 
     public function canTransitionTo(string $status): bool
@@ -49,7 +52,7 @@ class Appointment extends Model
             $data['checked_in_at'] = now();
         }
 
-        if ($status === 'completed') {
+        if (in_array($status, ['completed', 'paid'], true)) {
             $data['completed_at'] = now();
         }
 

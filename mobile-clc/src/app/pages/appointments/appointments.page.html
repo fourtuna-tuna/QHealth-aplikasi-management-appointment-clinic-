@@ -31,12 +31,14 @@
         </ion-item>
       </ion-list>
 
-      <ion-button expand="block" type="submit" [disabled]="isSubmitting || !form.doctor_id || !form.doctor_schedule_id || !form.appointment_date || !form.complaint.trim()">
+      <ion-button expand="block" type="submit" [disabled]="isSubmitting || activeAppointments.length > 0 || !form.doctor_id || !form.doctor_schedule_id || !form.appointment_date || !form.complaint.trim()">
         <ion-spinner *ngIf="isSubmitting" name="crescent" slot="start"></ion-spinner>
         <ion-icon *ngIf="!isSubmitting" name="checkmark-circle-outline" slot="start"></ion-icon>
         {{ isSubmitting ? 'Menyimpan...' : 'Simpan' }}
       </ion-button>
     </form>
+
+    <p class="empty-note" *ngIf="!loading && activeAppointments.length > 0">Anda masih memiliki antrean aktif.</p>
 
     <section class="panel appointment" *ngFor="let appointment of activeAppointments">
       <div>

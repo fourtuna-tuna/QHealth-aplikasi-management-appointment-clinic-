@@ -43,7 +43,6 @@
         <ion-item><ion-input label="Konfirmasi Password Baru" labelPlacement="stacked" type="password" [(ngModel)]="passwordForm.password_confirmation" name="new_password_confirmation" required minlength="8"></ion-input></ion-item>
       </ion-list>
       <ion-button expand="block" type="submit" [disabled]="!passwordForm.current_password || passwordForm.password.length < 8 || passwordForm.password !== passwordForm.password_confirmation">Ganti Password</ion-button>
-      <ion-button expand="block" fill="outline" type="button" (click)="sendResetPassword()">Kirim Link Reset via Email</ion-button>
     </form>
   </div>
 </ion-content>

@@ -48,8 +48,11 @@ export class QueuePage {
       pending: 'Menunggu konfirmasi',
       booked: 'Booking berhasil, silakan datang sesuai jadwal.',
       checked_in: 'Sudah check-in, silakan tunggu dipanggil.',
+      in_queue: 'Sedang dalam antrean',
+      in_progress: 'Sedang dilayani',
       completed: 'Selesai',
       cancelled: 'Dibatalkan karena melewati waktu kedatangan',
+      reset: 'Direset',
     };
 
     return labels[status] || status || '-';

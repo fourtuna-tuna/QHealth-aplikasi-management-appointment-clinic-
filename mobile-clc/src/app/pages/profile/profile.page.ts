@@ -53,16 +53,6 @@ export class ProfilePage {
     });
   }
 
-  sendResetPassword(): void {
-    if (!this.form.email) {
-      return;
-    }
-
-    this.auth.forgotPassword(this.form.email).subscribe(async () => {
-      (await this.toast.create({ message: 'Link reset password dikirim ke email Anda', duration: 2200, color: 'primary' })).present();
-    });
-  }
-
   changePassword(): void {
     this.auth.changePassword(this.passwordForm).subscribe({
       next: async () => {
